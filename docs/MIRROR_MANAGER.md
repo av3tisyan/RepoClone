@@ -11,9 +11,10 @@ A small, stdlib-only Python web app for the **connected sync host** that lets yo
 - or add a **custom** URL that it **probes and validates** first;
 - **estimate the download size before adding** (sums the upstream `Packages` `Size:`
   fields) and warns if it would exceed free space;
-- have it **auto-configure everything** — append the `deb`/`clean` lines to
-  `/etc/apt/mirror.list`, fetch + dearmor the repo's GPG key into `/opt/apt/keys`, and
-  **start the download** (`apt-mirror`) in the background;
+- have it **auto-configure everything** — append the `deb`/`clean` lines to the managed
+  `mirror.list` (under the default non-root install this is `/opt/apt/manager/mirror.list`,
+  with `/etc/apt/mirror.list` a symlink to it), fetch + dearmor the repo's GPG key into
+  `/opt/apt/keys`, and **start the download** (`apt-mirror`) in the background;
 - **edit** a managed repo, **enable/disable** it (comment its lines without deleting), and
   **remove** it — optionally **purging the on-disk files** to reclaim space;
 - open a **repo detail** view: suites/components, on-disk paths + size, last-updated,
@@ -40,7 +41,7 @@ toasts/status, a connection-lost banner, and reduced-motion support.
 | `scripts/mirror-manager/mirror_manager.py` | The HTTP daemon + JSON API |
 | `scripts/mirror-manager/index.html` | Self-contained dashboard (no external assets) |
 | `scripts/mirror-manager/presets.json` | Known-repo presets (keep in sync with `config/mirror.list`) |
-| `deploy/systemd/mirror-manager.service` | systemd unit (runs as root, binds 127.0.0.1:8080) |
+| `deploy/systemd/mirror-manager.service` | systemd unit (runs as the non-root `apt-manager` user by default, binds 127.0.0.1:8080) |
 | `deploy/nginx/mirror-manager.conf` | Optional LAN reverse proxy with basic auth + TLS |
 | `scripts/setup-mirror-manager.sh` | Installer |
 
@@ -55,6 +56,12 @@ sudo ./scripts/setup-mirror-manager.sh
 
 This copies the app to `/opt/apt/mirror-manager`, installs `mirror-manager.service`, and
 starts it bound to **127.0.0.1:8080**. Requires `python3` and (for key fetch) `gnupg`.
+
+By default the daemon runs as a dedicated **non-root `apt-manager`** user: the installer
+creates the user, gives it `/opt/apt/{keys,www,var}` + a state dir `/opt/apt/manager`
+(holding the canonical `mirror.list`, with `/etc/apt/mirror.list` symlinked to it), a
+narrow **sudoers** grant to start/stop `apt-mirror.{service,timer}`, and `systemd-journal`
+membership for log reads. Pass **`--user root`** to run as root instead (not recommended).
 
 ## Access
 
@@ -263,8 +270,12 @@ and reason only — never the password. A static htpasswd still works if you pre
 
 ## Security model
 
-- The daemon **runs as root** (it must write `/etc/apt/mirror.list`, `/opt/apt/keys`, and
-  start `apt-mirror`). It performs privileged actions — **treat access as root-equivalent.**
+- The daemon **runs as the non-root `apt-manager`** user by default. It owns only
+  `/opt/apt/{keys,www,var,manager}` and the managed `mirror.list`, and is granted — via a
+  narrow **sudoers** rule — exactly the ability to start/stop `apt-mirror.{service,timer}`
+  (nothing else). It still triggers privileged work, so **treat access as
+  sync-host-privileged**, but it is no longer root-equivalent. (`--user root` opts back into
+  the old root behavior, which writes `/etc/apt/mirror.list` directly — not recommended.)
 - It has **no built-in login.** Defence comes from: binding to localhost by default; an
   `MM_ALLOW` CIDR allowlist for direct LAN binds; an optional `MM_TOKEN` shared secret; and
   an `X-MM: 1` header required on mutating calls (blunts CSRF from a stray browser form).

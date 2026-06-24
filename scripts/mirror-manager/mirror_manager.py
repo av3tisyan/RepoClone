@@ -7,9 +7,11 @@ background sync, and watch disk usage against the budget.
 
 Design notes
 ------------
-* Runs on the CONNECTED sync host, as root (it writes /etc/apt/mirror.list and
-  /opt/apt/keys, and starts apt-mirror.service). Bind to 127.0.0.1 only; expose
-  via SSH tunnel or the nginx auth proxy in deploy/nginx/mirror-manager.conf.
+* Runs on the CONNECTED sync host as a dedicated non-root user (apt-manager) by
+  default — it owns the managed mirror.list + /opt/apt/keys and has a narrow
+  sudoers grant to start apt-mirror.service (pass --user root to opt out). Bind to
+  127.0.0.1 only; expose via SSH tunnel or the nginx auth proxy in
+  deploy/nginx/mirror-manager.conf.
 * It never rewrites hand-maintained lines: every repo it adds lives inside a
   delimited block  "# >>> mirror-manager: <name> >>> ... <<< mirror-manager: <name> <<<".
   Lines outside those markers are shown read-only as "manual" repos.
@@ -30,6 +32,8 @@ Config via environment (all optional):
                     "0.0.0.0/0"; empty = allow all. Only meaningful when clients reach the
                     daemon directly — behind nginx the peer is the proxy, so filter there.)
 """
+
+__version__ = "1.0.0"
 
 import gzip
 import hashlib

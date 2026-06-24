@@ -108,7 +108,6 @@ The upstream file is **armored** (`.asc`); **`gpg --dearmor`** is required for *
 ## Airgap distribution
 
 - Ship updated **`debian-archive-keyring`** / **`ubuntu-keyring`** packages through your mirror when upstream rotates keys.
-- For Zabbix, copy an updated `zabbix.gpg` via configuration management when Zabbix publishes a new key.
-- For HashiCorp, copy an updated `hashicorp.gpg` via configuration management when HashiCorp publishes a new key.
+- For third-party repos (**Zabbix**, **HashiCorp**, **OpenProject**, **PostgreSQL/PGDG**), re-run **`populate-mirror-keys.sh`** when upstream rotates a key and re-`rsync` `/opt/apt/keys` (which serves `zabbix.gpg`, `hashicorp.gpg`, `openproject.gpg`, `postgresql.gpg`), or push the updated `.gpg` via configuration management.
 
 Do **not** use deprecated `apt-key add`.

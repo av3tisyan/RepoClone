@@ -10,6 +10,8 @@ The airgap **nginx** server can serve **pre-copied** archive key files so client
 | `/opt/apt/keys/ubuntu-archive-keyring.gpg` | `https://apt.example.com/keys/ubuntu-archive-keyring.gpg` |
 | `/opt/apt/keys/zabbix.gpg` | `https://apt.example.com/keys/zabbix.gpg` |
 | `/opt/apt/keys/hashicorp.gpg` | `https://apt.example.com/keys/hashicorp.gpg` |
+| `/opt/apt/keys/openproject.gpg` | `https://apt.example.com/keys/openproject.gpg` |
+| `/opt/apt/keys/postgresql.gpg` | `https://apt.example.com/keys/postgresql.gpg` |
 | `/opt/apt/keys/SHA256SUMS` | checksums for the `.gpg` files |
 
 `location /keys/` is defined in `deploy/nginx/apt.example.com.conf`.
@@ -28,6 +30,8 @@ This creates **`/opt/apt/keys`**, fills it using:
 - **`ubuntu-archive-keyring.gpg`** — extracted from the official **`ubuntu-keyring`** `.deb` on Ubuntu’s pool (version set by **`UBUNTU_KEYRING_VER`**, default pinned in the script).
 - **`zabbix.gpg`** — downloaded from Zabbix’s documented key URL and **dearmored** with `gpg --dearmor` (required for client **`Signed-By=`**).
 - **`hashicorp.gpg`** — downloaded from `https://apt.releases.hashicorp.com/gpg` and **dearmored** with `gpg --dearmor` (required for client **`Signed-By=`**).
+- **`openproject.gpg`** — downloaded from OpenProject's documented key URL and **dearmored** with `gpg --dearmor`.
+- **`postgresql.gpg`** — PGDG signing key (`ACCC4CF8`) downloaded and **dearmored** with `gpg --dearmor`.
 
 If the Ubuntu download fails, pick a current **`ubuntu-keyring_*_all.deb`** from [pool](http://archive.ubuntu.com/ubuntu/pool/main/u/ubuntu-keyring/) and set:
 
@@ -54,6 +58,10 @@ sudo curl -fsSL https://apt.example.com/keys/zabbix.gpg \
   -o /etc/apt/keyrings/zabbix.gpg
 sudo curl -fsSL https://apt.example.com/keys/hashicorp.gpg \
   -o /etc/apt/keyrings/hashicorp.gpg
+sudo curl -fsSL https://apt.example.com/keys/openproject.gpg \
+  -o /etc/apt/keyrings/openproject.gpg
+sudo curl -fsSL https://apt.example.com/keys/postgresql.gpg \
+  -o /etc/apt/keyrings/postgresql.gpg
 sudo chmod 0644 /etc/apt/keyrings/*.gpg
 ```
 

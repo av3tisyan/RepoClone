@@ -1,5 +1,7 @@
 # Air-gapped APT mirror (implementation kit)
 
+**Version 1.0.0** — first stable release.
+
 Operational files for **`apt-mirror`** on **Debian 13**, **`/opt/apt`**, clients at **`https://apt.example.com`** (amd64, ~2 TB budget). The seed `config/mirror.list` mirrors only the **base OS** — **Debian 12/13** and **Ubuntu 24.04**; third-party repos (**Zabbix**, **HashiCorp**, **OpenProject**, **PostgreSQL**, **Docker**, **Grafana**, …) are added **on demand** from the mirror-manager dashboard (catalog / add-by-URL).
 
 ## Screenshots
@@ -29,7 +31,7 @@ The **mirror-manager** dashboard (add repos, sync, disk/budget, snapshots, clien
 | `config/postmirror.sh` | Optional hook — copy to `/opt/apt/var/postmirror.sh`, `chmod +x` |
 | `deploy/systemd/` | `apt-mirror.service` + `apt-mirror.timer` (daily sync) |
 | `deploy/nginx/` | **nginx** vhost for `apt.example.com` → `root /opt/apt/mirror` |
-| `deploy/logrotate/` | Rotate apt-mirror logs under `/opt/apt/var` |
+| `deploy/logrotate.d/` | Rotate apt-mirror logs under `/opt/apt/var` |
 | `scripts/` | **`setup-apt-mirror-server.sh`**, **`remove-apt-mirror-config.sh`** (teardown), `populate-mirror-keys.sh`, **`setup-apt-client.sh`**, **`run-mirror-clean.sh`**, `rsync-to-airgap.sh`, `check-mirror-health.sh`, **`setup-mirror-manager.sh`** |
 | `scripts/mirror-manager/` | **Web dashboard** to add repos (presets/custom + probe), auto-configure, sync, and watch disk usage — see `docs/MIRROR_MANAGER.md` |
 | `docs/` | Server/client setup, GPG, keys, Zabbix, airgap, **`TROUBLESHOOTING`**, **`SYSTEM_CLEANUP`** |
@@ -149,6 +151,8 @@ The disk-full **guard** aborts a sync below `MIN_FREE_GB`, and the dashboard sho
 - `docs/MIRROR_HOST_KEYS.md` — **`/opt/apt/keys`** + nginx **`/keys/`**  
 - `docs/CLIENT_MIRROR_URLS.md` — client **`URIs=`**, key URLs, deb822 examples  
 - `docs/CLIENT_SETUP.md` — **`setup-apt-client.sh`** on clients  
+- `docs/CLIENT_SOURCES.md` — dashboard **Client sources** generator (deb822 + install script)  
+- `docs/AIRGAP_TRANSFER.md` — cross the air gap (**`rsync-to-airgap.sh`** / removable media)  
 - `docs/ZABBIX_REPOS.md` — Zabbix URL mapping  
 - `docs/OPENPROJECT_REPO.md` — **OpenProject** URL mapping (Debian 12 only; numeric suite)  
 - `docs/POSTGRESQL_REPO.md` — **PostgreSQL/PGDG** URL mapping (`<codename>-pgdg main`; postgresql-17 lives in `main`)  

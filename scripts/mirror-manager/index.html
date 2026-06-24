@@ -236,7 +236,7 @@
       <span class="logo" aria-hidden="true">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
       </span>
-      <span><b>APT Mirror</b><div class="sub">control plane</div></span>
+      <span><b>APT Mirror</b><div class="sub">control plane · v1.0</div></span>
     </div>
     <nav class="side" aria-label="Sections">
       <button class="nav-item" data-view="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Overview</button>
@@ -947,7 +947,7 @@ async function applySrc(){
   // Always explicit so it faithfully matches the ticks ("--none" = base only).
   const opt=SRC_GROUPS.filter(g=>!g.base).map(g=>g.name);
   const selOpt=sel.filter(n=>opt.includes(n));
-  const url=(LAST&&LAST.public_url?LAST.public_url:"https://apt.example.am")+"/setup.sh";
+  const url=(LAST&&LAST.public_url?LAST.public_url:"https://apt.example.com")+"/setup.sh";
   const args=selOpt.length?selOpt.join(" "):"--none";
   document.getElementById("srcCmd").textContent="curl -fsSL "+url+" | sudo sh -s -- "+args;
   document.getElementById("srcOneliner").style.display="block";
@@ -976,7 +976,7 @@ document.getElementById("verifyBtn").onclick=async()=>{
 };
 
 // ---- landing page + bootstrap ----
-document.getElementById("oneliner").textContent="curl -fsSL "+(LAST&&LAST.public_url?LAST.public_url:"https://apt.example.am")+"/setup.sh | sudo sh";
+document.getElementById("oneliner").textContent="curl -fsSL "+(LAST&&LAST.public_url?LAST.public_url:"https://apt.example.com")+"/setup.sh | sudo sh";
 document.getElementById("landingPreview").onclick=()=>{window.open(API+"landing"+qs,"_blank","noopener")};
 document.getElementById("setupPreview").onclick=()=>{window.open(API+"setup"+qs,"_blank","noopener")};
 document.getElementById("landingPublish").onclick=async()=>{
