@@ -20,6 +20,7 @@
     --primary:#3b82f6; --primary-2:#2563eb; --accent:#60a5fa; --violet:#8b5cf6;
     --ok:#10b981; --warn:#f59e0b; --bad:#ef4444;
     --radius:10px; --radius-sm:7px; --sb:224px; --shadow:0 10px 34px rgba(0,0,0,.5);
+    --ctl:36px; --ctl-sm:30px;
     --ok-bg:rgba(16,185,129,.13); --warn-bg:rgba(245,158,11,.15); --bad-bg:rgba(239,68,68,.13); --pri-bg:rgba(59,130,246,.13);
   }
   *{box-sizing:border-box}
@@ -46,6 +47,13 @@
   .nav-sect{font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:18px 10px 8px}
   .side-foot{margin-top:auto;padding:12px 16px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);word-break:break-all}
   .side-foot .ag{display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:10px;font-weight:600;letter-spacing:.05em;color:var(--muted);text-transform:uppercase}
+  .side-foot .sdot{width:7px;height:7px;border-radius:50%;flex:0 0 auto;background:var(--muted);transition:background .2s}
+  .side-foot .sdot.ok{background:var(--ok);box-shadow:0 0 0 3px var(--ok-bg)}
+  .side-foot .sdot.warn{background:var(--warn);box-shadow:0 0 0 3px var(--warn-bg)}
+  .side-foot .sdot.bad{background:var(--bad);box-shadow:0 0 0 3px var(--bad-bg)}
+  .side-foot .sdot.sync{animation:pulse 1.6s ease-in-out infinite}
+  .side-foot .sstat{margin-left:auto;font-size:9px;font-weight:700;letter-spacing:.04em}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
   .side-foot .ag svg{width:11px;height:11px;flex:0 0 auto}
   .side-foot .pathline{font:10px/1.4 'JetBrains Mono',ui-monospace,Menlo,Consolas,monospace;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
@@ -64,6 +72,7 @@
   .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:16px}
   .panel h2{margin:-20px -20px 18px;padding:13px 20px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--line)}
   .panel h2 .right{margin-left:auto;display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-weight:500}
+  .panel h2 .right input,.panel h2 .right select{height:var(--ctl-sm);padding:0 10px;font-size:12px;width:auto}
   .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
   .grid-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:16px}
   .kpi{position:relative;overflow:hidden;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px}
@@ -96,17 +105,18 @@
   .pill.run{background:var(--warn-bg);color:#fbbf24;border-color:rgba(245,158,11,.3)} .pill.idle{background:var(--ok-bg);color:#34d399;border-color:rgba(16,185,129,.3)}
   .pill .dot{margin:0}
 
-  button{font:inherit;font-weight:600;font-size:13px;background:var(--primary);color:#fff;border:0;border-radius:var(--radius-sm);padding:8px 15px;cursor:pointer;transition:filter .12s,background .12s;box-shadow:0 1px 3px rgba(59,130,246,.35)}
+  button{font:inherit;font-weight:600;font-size:13px;background:var(--primary);color:#fff;border:0;border-radius:var(--radius-sm);height:var(--ctl);padding:0 16px;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;cursor:pointer;transition:filter .12s,background .12s;box-shadow:0 1px 3px rgba(59,130,246,.35)}
   button:hover{filter:brightness(1.08)} button:active{filter:brightness(.95)}
   button.ghost{background:var(--surface2);border:1px solid var(--line2);color:var(--fg2);box-shadow:none}
   button.ghost:hover{background:var(--surface3);color:var(--fg);filter:none}
-  button.sm{padding:5px 11px;font-size:12px}
+  button.sm{height:var(--ctl-sm);padding:0 13px;font-size:12px}
   button.danger{background:transparent;border:1px solid var(--bad);color:#ff8a82}
   button.danger:hover{background:var(--bad-bg);filter:none}
   button:disabled{opacity:.45;cursor:not-allowed}
 
   label{display:block;font-size:12px;color:var(--muted);margin:12px 0 5px}
   input,select,textarea{width:100%;background:var(--inputbg);color:var(--fg);border:1px solid var(--line2);border-radius:var(--radius-sm);padding:9px 11px;font:inherit}
+  input,select{height:var(--ctl);padding:0 11px}
   input::placeholder{color:#5b6776}
   input:focus,select:focus{border-color:var(--primary);outline:none;box-shadow:0 0 0 3px var(--pri-bg)}
   .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
@@ -181,7 +191,7 @@
 
   /* ---- topbar extras ---- */
   .tb-meta{font-size:11px;color:var(--muted);white-space:nowrap}
-  .icon-btn{background:transparent;border:1px solid var(--line2);color:var(--fg2);height:30px;min-width:30px;border-radius:7px;display:inline-grid;place-items:center;padding:0 8px;cursor:pointer;font-size:14px;line-height:1}
+  .icon-btn{background:transparent;border:1px solid var(--line2);color:var(--fg2);height:var(--ctl-sm);min-width:var(--ctl-sm);border-radius:var(--radius-sm);display:inline-grid;place-items:center;padding:0 8px;cursor:pointer;font-size:14px;line-height:1}
   .icon-btn:hover{background:var(--surface2);color:var(--fg);filter:none}
   .health{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
   .health b{color:var(--fg)}
@@ -238,7 +248,7 @@
       <button class="nav-item" data-view="server"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="7" rx="1"/><rect x="3" y="13" width="18" height="7" rx="1"/><path d="M7 8h.01M7 17h.01"/></svg>Server</button>
     </nav>
     <div class="side-foot">
-      <div class="ag"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-4z"/></svg>Air-gapped mirror</div>
+      <div class="ag"><span class="sdot" id="sysDot" title="System status"></span><span>Air-gapped mirror</span><span class="sstat" id="sysStat"></span></div>
       <div class="pathline" id="listPath"></div>
     </div>
   </aside>
@@ -369,10 +379,10 @@
               <div><label for="cArch">Arch</label><input id="cArch" placeholder="amd64"></div>
             </div>
             <label for="cKey">Key URL (armored/binary; optional)</label><input id="cKey" placeholder="https://example.com/repo/key.asc">
-            <div style="margin-top:10px"><button class="ghost sm" id="probeBtn">Probe &amp; validate</button></div>
+            <div style="margin-top:14px"><button class="ghost sm" id="probeBtn">Probe &amp; validate</button></div>
             <div class="probe" id="probeOut"></div>
           </div>
-          <div class="row" style="margin-top:16px">
+          <div class="row" style="margin-top:14px">
             <div style="flex:0;white-space:nowrap"><button class="ghost sm" id="estimateBtn">Estimate size</button></div>
             <div class="probe" id="estimateOut" style="margin:0"></div>
           </div>
@@ -484,7 +494,7 @@ function esc(s){return (s==null?"":""+s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":
 function toast(msg,ok=true){const t=document.createElement("div");t.className="toast "+(ok?"ok":"err");t.textContent=msg;document.getElementById("toasts").appendChild(t);setTimeout(()=>{t.style.opacity="0";setTimeout(()=>t.remove(),300)},ok?3500:6000)}
 function download(name,text){const b=new Blob([text],{type:"text/plain"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(u)}
 function setBar(id,frac){const b=document.getElementById(id);if(!b)return;const pct=Math.min(100,Math.max(0,frac*100));b.querySelector("span").style.width=pct+"%";b.className="bar"+(pct>=95?" bad":pct>=80?" warn":"")}
-function setOffline(b){document.getElementById("offlineBanner").classList.toggle("show",b)}
+function setOffline(b){document.getElementById("offlineBanner").classList.toggle("show",b);const dt=document.getElementById("sysDot"),st=document.getElementById("sysStat");if(b&&dt){dt.className="sdot bad";st.textContent="offline";st.style.color="var(--bad)"}}
 
 // Demo mode (?demo=1 or #demo): render public-safe mock data, no backend — for screenshots.
 const DEMO=new URLSearchParams(location.search).get("demo")==="1"||location.hash==="#demo";
@@ -674,6 +684,7 @@ async function refresh(){
     +(stale?` · <b style="color:var(--warn)">${stale}</b> need sync`:"")
     +(s.low_disk?` · <b style="color:var(--bad)">low disk</b>`:"");
   document.getElementById("kFree").parentElement.classList.toggle("alert",!!s.low_disk);
+  (function(){const dt=document.getElementById("sysDot"),st=document.getElementById("sysStat");if(!dt)return;let cls="ok",word="online";if(s.low_disk){cls="bad";word="low disk"}else if(s.sync.running){cls="warn";word="syncing"}else if(d.budget_used_pct>=90){cls="warn";word="budget high"}else if(stale){cls="warn";word=stale+" stale"}dt.className="sdot "+cls+(s.sync.running?" sync":"");dt.title="System status: "+word;st.textContent=word;st.style.color="var(--"+cls+")"})();
   LAST_UPDATED=Date.now(); tickUpdated();
   renderStorageViz(s); renderRepos(s); renderCatalog(); renderAudit(); renderSnapshots();
 }
