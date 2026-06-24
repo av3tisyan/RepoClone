@@ -141,6 +141,57 @@
     .grid2{grid-template-columns:1fr}
   }
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+  /* ---- light theme ---- */
+  [data-theme="light"]{
+    --bg:#eef1f6; --surface:#ffffff; --surface2:#f3f6fa; --surface3:#e8edf3;
+    --line:#dde3ec; --line2:#c8d2df; --fg:#0f1722; --fg2:#33414f; --muted:#5d6b7c;
+    --shadow:0 6px 24px rgba(15,23,42,.08);
+    --ok-bg:rgba(46,160,67,.12); --warn-bg:rgba(210,153,34,.18); --bad-bg:rgba(248,81,73,.10); --pri-bg:rgba(79,140,255,.12);
+  }
+  body{transition:background .2s ease,color .2s ease}
+  [data-theme="light"] .topbar{background:rgba(255,255,255,.82)}
+  [data-theme="light"] code,[data-theme="light"] input,[data-theme="light"] select,
+  [data-theme="light"] .bar,[data-theme="light"] .minibar,[data-theme="light"] .hbar .track{background:#e8edf3}
+  /* logs/code stay dark for legibility in both themes */
+  [data-theme="light"] pre{background:#0d1117;color:#cdd9e5}
+
+  /* ---- topbar extras ---- */
+  .tb-meta{font-size:12px;color:var(--muted);white-space:nowrap}
+  .icon-btn{background:transparent;border:1px solid var(--line2);color:var(--fg);height:32px;min-width:32px;border-radius:9px;display:inline-grid;place-items:center;padding:0 8px;cursor:pointer;font-size:15px;line-height:1}
+  .icon-btn:hover{background:var(--surface2);filter:none}
+  .health{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
+  .health b{color:var(--fg)}
+
+  /* ---- KPI enrichments ---- */
+  .kpi{position:relative;overflow:hidden}
+  .kpi .val{font-variant-numeric:tabular-nums}
+  .kpi.alert{border-color:var(--bad);box-shadow:inset 3px 0 0 var(--bad)}
+
+  /* ---- charts: donut + horizontal bars ---- */
+  .viz{display:grid;grid-template-columns:150px 1fr;gap:24px;align-items:center}
+  @media (max-width:680px){.viz{grid-template-columns:1fr;justify-items:center}}
+  .donut{width:150px;height:150px;flex:0 0 auto}
+  .hbars{display:flex;flex-direction:column;gap:10px;width:100%}
+  .hbar{display:grid;grid-template-columns:150px 1fr 72px;gap:12px;align-items:center;font-size:12px}
+  @media (max-width:520px){.hbar{grid-template-columns:110px 1fr 64px}}
+  .hbar .name{color:var(--fg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .hbar .track{height:10px;background:#0b0f16;border:1px solid var(--line);border-radius:99px;overflow:hidden}
+  .hbar .track>span{display:block;height:100%;background:linear-gradient(90deg,var(--primary),#7aa9ff);border-radius:99px;transition:width .6s ease}
+  .hbar .amt{color:var(--muted);text-align:right;font-variant-numeric:tabular-nums}
+  .legend{display:flex;gap:16px;font-size:12px;color:var(--muted);margin-top:14px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:middle}
+
+  /* ---- table: sortable + per-row size mini-bar ---- */
+  thead th.sortable{cursor:pointer;user-select:none}
+  thead th.sortable:hover{color:var(--fg)}
+  thead th .arrow{font-size:9px;opacity:.6;margin-left:3px}
+  .minibar{height:5px;width:96px;margin:5px 0 0 auto;background:#0b0f16;border:1px solid var(--line);border-radius:99px;overflow:hidden}
+  .minibar>span{display:block;height:100%;background:linear-gradient(90deg,var(--primary),#7aa9ff)}
+
+  /* ---- skeleton loading ---- */
+  .skel{display:inline-block;height:12px;width:60%;border-radius:4px;background:linear-gradient(90deg,var(--surface2),var(--surface3),var(--surface2));background-size:200% 100%;animation:shimmer 1.2s infinite}
+  @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 </style>
 </head>
 <body>
@@ -170,8 +221,11 @@
   <div class="content">
     <header class="topbar">
       <h1 id="viewTitle">Overview</h1>
+      <span class="health" id="tbHealth"></span>
       <span class="spacer"></span>
+      <span class="tb-meta" id="tbUpdated"></span>
       <span id="syncPill" class="pill idle"><span class="dot"></span>idle</span>
+      <button class="icon-btn" id="themeBtn" title="Toggle light / dark" aria-label="Toggle light/dark theme">◐</button>
       <button class="sm" id="quickSync">Sync now</button>
     </header>
 
@@ -190,6 +244,19 @@
             <div><div class="stat">Disk <b id="diskUsed">–</b> / <b id="diskTotal">–</b> · <b id="diskFree">–</b> free · mirror data <b id="reposTotal">–</b></div><div class="bar" id="diskBar"><span style="width:0"></span></div></div>
             <div><div class="stat">Budget <b id="budUsed">–</b> / <b id="budTotal">–</b> (<b id="budPct">–</b>)</div><div class="bar" id="budBar"><span style="width:0"></span></div></div>
           </div>
+        </div>
+        <div class="panel">
+          <h2>Where the space goes <span class="right muted" id="vizTotal"></span></h2>
+          <div class="viz">
+            <svg class="donut" id="donut" viewBox="0 0 42 42" role="img" aria-label="Disk usage donut"></svg>
+            <div class="hbars" id="topRepos"><div class="skel" style="width:80%"></div></div>
+          </div>
+          <div class="legend"><span><i style="background:var(--primary)"></i>used</span><span><i style="background:var(--line2)"></i>free</span></div>
+        </div>
+        <div class="panel">
+          <h2>Budget estimation <span class="right"><button class="ghost sm" id="estAll">Estimate full size</button></span></h2>
+          <div class="stat" id="estAllOut">Estimates the full upstream download size of all configured repos vs your free space and budget (reads upstream indexes — on demand).</div>
+          <div id="estAllBars"></div>
         </div>
         <div class="panel">
           <h2>Sync status <span class="right"><span class="muted" id="ovTimer"></span></span></h2>
@@ -220,8 +287,17 @@
             </span>
           </h2>
           <table>
-            <thead><tr><th>Repository</th><th>Suites / components</th><th class="r">Updated</th><th class="r">Size</th><th></th></tr></thead>
-            <tbody id="repoRows"><tr><td colspan="5" class="empty">loading…</td></tr></tbody>
+            <thead><tr>
+              <th class="sortable" data-sort="name">Repository<span class="arrow"></span></th>
+              <th>Suites / components</th>
+              <th class="r sortable" data-sort="last_updated">Updated<span class="arrow"></span></th>
+              <th class="r sortable" data-sort="size">Size<span class="arrow"></span></th>
+              <th></th>
+            </tr></thead>
+            <tbody id="repoRows">
+              <tr><td><span class="skel" style="width:55%"></span></td><td><span class="skel"></span></td><td class="r"><span class="skel" style="width:40%"></span></td><td class="r"><span class="skel" style="width:50%"></span></td><td></td></tr>
+              <tr><td><span class="skel" style="width:45%"></span></td><td><span class="skel" style="width:70%"></span></td><td class="r"><span class="skel" style="width:40%"></span></td><td class="r"><span class="skel" style="width:50%"></span></td><td></td></tr>
+            </tbody>
           </table>
         </div>
         <div class="panel">
@@ -413,6 +489,50 @@ document.addEventListener("keydown",e=>{if(e.key==="Escape"&&document.getElement
 function flash(id,text,ok){const e=document.getElementById(id);if(!e)return;e.textContent=text;e.className="msg "+(ok?"ok":"err")}
 
 // ---- status refresh ----
+// ---- theme (persisted) ----
+function applyTheme(t){t=(t==="light")?"light":"dark";document.documentElement.setAttribute("data-theme",t);try{localStorage.setItem("mm-theme",t)}catch(e){}const b=document.getElementById("themeBtn");if(b)b.textContent=t==="light"?"☀":"◐";}
+(function(){let t="dark";try{t=localStorage.getItem("mm-theme")||"dark"}catch(e){}applyTheme(t);})();
+document.getElementById("themeBtn").onclick=()=>applyTheme(document.documentElement.getAttribute("data-theme")==="light"?"dark":"light");
+
+// ---- last-updated ticker ----
+let LAST_UPDATED=0;
+function tickUpdated(){const e=document.getElementById("tbUpdated");if(e)e.textContent=LAST_UPDATED?("updated "+ago(LAST_UPDATED/1000)):""}
+setInterval(tickUpdated,1000);
+
+// ---- storage donut + top repositories by size ----
+function renderStorageViz(s){
+  const d=s.disk,used=d.used,total=d.total||1,pct=Math.max(0,Math.min(100,used/total*100));
+  const col=pct>=95?"var(--bad)":pct>=80?"var(--warn)":"var(--primary)";
+  const donut=document.getElementById("donut");
+  if(donut)donut.innerHTML=
+    '<circle cx="21" cy="21" r="15.915" fill="none" stroke="var(--line2)" stroke-width="5.5"></circle>'
+    +`<circle cx="21" cy="21" r="15.915" fill="none" stroke="${col}" stroke-width="5.5" stroke-linecap="round" stroke-dasharray="${pct.toFixed(1)} ${(100-pct).toFixed(1)}" stroke-dashoffset="25"></circle>`
+    +`<text x="21" y="20.5" text-anchor="middle" font-size="8" font-weight="700" fill="var(--fg)">${Math.round(pct)}%</text>`
+    +'<text x="21" y="26.5" text-anchor="middle" font-size="3.6" fill="var(--muted)">disk used</text>';
+  const wrap=document.getElementById("topRepos");if(!wrap)return;
+  const repos=[...s.managed,...s.manual].filter(r=>r.size>0).sort((a,b)=>b.size-a.size).slice(0,8);
+  const max=Math.max(1,...repos.map(r=>r.size));
+  const vt=document.getElementById("vizTotal");if(vt)vt.textContent=fmt(s.repos_total)+" across "+(s.managed.length+s.manual.length)+" repos";
+  wrap.innerHTML=repos.length?repos.map(r=>
+    `<div class="hbar"><span class="name" title="${esc(r.name)}">${esc(r.name)}</span>`
+    +`<span class="track"><span style="width:${Math.round(r.size/max*100)}%"></span></span>`
+    +`<span class="amt">${fmt(r.size)}</span></div>`).join("")
+    :'<div class="muted">No per-repo sizes yet — run “Recompute sizes” on the Repositories tab.</div>';
+}
+
+document.getElementById("estAll").onclick=async()=>{
+  const out=document.getElementById("estAllOut");const bars=document.getElementById("estAllBars");
+  out.textContent="estimating (reading upstream indexes — may take a moment)…";bars.innerHTML="";
+  const j=await api("estimate-all");if(j.error){out.textContent="✗ "+j.error;return}
+  const verdict=j.exceeds_budget?'<span style="color:var(--bad)">exceeds budget</span>'
+    :j.exceeds_free?'<span style="color:var(--warn)">exceeds free space</span>'
+    :'<span style="color:var(--ok)">fits</span>';
+  out.innerHTML=`Full mirror of all configured repos ≈ <b>${fmt(j.total)}</b> to download · free ${fmt(j.free)} · budget ${fmt(j.budget)} → ${verdict}`;
+  const max=Math.max(1,...j.per.map(p=>p.bytes));
+  bars.innerHTML='<div class="hbars" style="margin-top:12px">'+j.per.filter(p=>p.bytes>0).map(p=>
+    `<div class="hbar"><span class="name" title="${esc(p.name)}">${esc(p.name)}</span><span class="track"><span style="width:${Math.round(p.bytes/max*100)}%"></span></span><span class="amt">${fmt(p.bytes)}</span></div>`).join("")+'</div>';
+};
+
 async function refresh(){
   const s=await api("status");if(s.__offline||s.error){return}LAST=s;
   document.getElementById("listPath").textContent=s.mirror_list;
@@ -450,7 +570,17 @@ async function refresh(){
   document.getElementById("ovTimer").textContent=ti;
   document.getElementById("timerBtn").textContent=t.enabled?"disable timer":"enable timer";
   document.getElementById("sizesAge").textContent=s.sizes_computing?"· computing sizes…":(s.sizes_updated?"· sizes "+ago(s.sizes_updated):"· sizes not computed");
-  renderRepos(s); renderCatalog(); renderAudit(); renderSnapshots();
+  // topbar health summary + last-updated
+  const reposN=s.managed.length+s.manual.length;
+  const stale=[...s.managed,...s.manual].filter(r=>r.enabled!==false && r.health===false).length;
+  document.getElementById("tbHealth").innerHTML=
+    `<span class="dot ${s.low_disk?'bad':(d.budget_used_pct>=90?'warn':'ok')}"></span>`
+    +`<b>${reposN}</b> repos · <b>${(d.budget_used_pct??'–')}%</b> of budget`
+    +(stale?` · <b style="color:var(--warn)">${stale}</b> need sync`:"")
+    +(s.low_disk?` · <b style="color:var(--bad)">low disk</b>`:"");
+  document.getElementById("kFree").parentElement.classList.toggle("alert",!!s.low_disk);
+  LAST_UPDATED=Date.now(); tickUpdated();
+  renderStorageViz(s); renderRepos(s); renderCatalog(); renderAudit(); renderSnapshots();
 }
 
 async function renderSnapshots(){
@@ -490,18 +620,24 @@ function rowHealth(r){
   if(r.health===false)return '<span class="dot bad" title="not synced yet / missing Release"></span>';
   return '<span class="dot unk" title="not on disk yet"></span>';
 }
+let REPO_SORT={key:"size",dir:-1};
 function renderRepos(s){
   const f=(document.getElementById("filter").value||"").toLowerCase();
   const tb=document.getElementById("repoRows");tb.innerHTML="";
-  const rows=[...s.managed,...s.manual].filter(r=>!f||r.name.toLowerCase().includes(f)||r.hosts.join(" ").includes(f));
+  let rows=[...s.managed,...s.manual].filter(r=>!f||r.name.toLowerCase().includes(f)||r.hosts.join(" ").includes(f));
+  const k=REPO_SORT.key,dir=REPO_SORT.dir;
+  rows.sort((a,b)=>{ if(k==="name"){const x=a.name.toLowerCase(),y=b.name.toLowerCase();return x<y?-dir:x>y?dir:0;} return ((a[k]||0)-(b[k]||0))*dir; });
+  document.querySelectorAll('thead th.sortable').forEach(th=>{const ar=th.querySelector(".arrow");if(ar)ar.textContent=th.dataset.sort===k?(dir<0?"▼":"▲"):"";});
   if(!rows.length){tb.innerHTML='<tr><td colspan="5" class="empty">no repositories</td></tr>';return}
+  const max=Math.max(1,...rows.map(r=>r.size||0));
   for(const repo of rows){
     const suites=[...new Set(repo.deb.map(x=>x.suite))].join(", ");
     const comps=[...new Set(repo.deb.flatMap(x=>x.components.split(/\s+/)))].join(" ");
     const tr=document.createElement("tr");tr.className="repo";
     tr.innerHTML=`<td>${rowHealth(repo)}${esc(repo.name)} ${repo.managed?'<span class="tag m">managed</span>':'<span class="tag">manual</span>'}${repo.enabled?'':' <span class="tag">disabled</span>'}<div class="src">${esc(repo.hosts.join(", "))}</div></td>`
       +`<td>${esc(suites)}<div class="src">${esc(comps)}</div></td>`
-      +`<td class="r src">${ago(repo.last_updated)}</td><td class="r">${fmt(repo.size)}</td>`
+      +`<td class="r src">${ago(repo.last_updated)}</td>`
+      +`<td class="r">${fmt(repo.size)}<div class="minibar" title="${Math.round((repo.size||0)/max*100)}% of largest"><span style="width:${Math.round((repo.size||0)/max*100)}%"></span></div></td>`
       +`<td class="r"><button class="ghost sm" data-info="${esc(repo.name)}">details</button></td>`;
     tr.querySelector("[data-info]").onclick=e=>{e.stopPropagation();openRepo(repo.name)};
     tr.onclick=()=>openRepo(repo.name);
@@ -509,6 +645,11 @@ function renderRepos(s){
   }
 }
 document.getElementById("filter").oninput=()=>{if(LAST)renderRepos(LAST)};
+document.querySelectorAll('thead th.sortable').forEach(th=>th.onclick=()=>{
+  const k=th.dataset.sort;
+  if(REPO_SORT.key===k) REPO_SORT.dir*=-1; else REPO_SORT={key:k,dir:k==="name"?1:-1};
+  if(LAST) renderRepos(LAST);
+});
 
 function renderCatalog(){
   const wrap=document.getElementById("catalog");if(!wrap)return;

@@ -444,6 +444,24 @@ def estimate_entries(entries):
     return {"bytes": total, "detail": detail}
 
 
+def estimate_all():
+    """Budget estimation: full upstream download size of EVERY configured (enabled) repo,
+    vs current free space and budget. Reads upstream Packages indexes — slow; on-demand."""
+    managed, manual = parse_repos(read_list())
+    per, total = [], 0
+    for r in [x for x in managed + manual if x.get("enabled", True)]:
+        entries = [{"url": d["url"], "suites": [d["suite"]],
+                    "components": d["components"].split(), "arch": arch_value(d.get("arch"))}
+                   for d in r["deb"]]
+        b = estimate_entries(entries)["bytes"]
+        per.append({"name": r["name"], "bytes": b})
+        total += b
+    disk = disk_status()
+    return {"total": total, "per": sorted(per, key=lambda x: -x["bytes"]),
+            "used": disk["used"], "free": disk["free"], "budget": disk["budget"],
+            "exceeds_free": total > disk["free"], "exceeds_budget": total > disk["budget"]}
+
+
 def timer_state():
     info = {}
     r = run(["systemctl", "show", APT_TIMER, "-p", "NextElapseUSecRealtime",
@@ -1307,6 +1325,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, {"entries": read_audit(min(n, 1000))})
         if path == "/api/snapshots":
             return self._send(200, snapshots_info())
+        if path == "/api/estimate-all":
+            return self._send(200, estimate_all())
         if path == "/api/backup":
             return self._backup()
         return self._send(404, {"error": "not found"})

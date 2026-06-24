@@ -160,6 +160,16 @@ known-good date in its `URIs=`. *Prune* keeps the newest N (retention). `restore
 rsyncs a snapshot back over the live tree. Schedule periodic snapshots with a cron/timer
 calling `mirror-snapshot.sh create` then `prune`.
 
+**Budget estimation:** the Overview *Budget estimation* panel (`GET /api/estimate-all`)
+estimates the **full upstream download size of every configured repo** (sums the `Packages`
+`Size:` fields) and compares it to free space and the budget — a fits / exceeds-free /
+exceeds-budget verdict plus a per-repo breakdown, so you can right-size before syncing.
+
+**Visuals:** the Overview shows a disk-usage **donut** and a **"where the space goes"** bar
+chart (top repos by size); the Repositories table has sortable columns and per-row size
+mini-bars. A header health strip summarizes repo count / budget % / repos needing sync, and a
+light/dark theme toggle (persisted) sits in the top bar.
+
 **Disk usage:** the *Storage* panel shows live free/used (instant `df`), total mirror data,
 and budget. Per-repo sizes come from `du` (slow on a TB mirror) and are cached; click
 **Recompute sizes** to refresh.

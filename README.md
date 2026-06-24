@@ -81,6 +81,29 @@ Logs: `sudo journalctl -u apt-mirror.service -b` and files under `/opt/apt/var/`
 
 Keep mirrored data **≤ ~1.6–1.7 TB** on a **2 TB** disk; monitor with `df` and `du -sh /opt/apt`.
 
+### Minimum storage recommendation
+
+Ballpark **amd64-only** download sizes (vary with components/arch; use the dashboard's
+**Budget estimation** for exact current numbers — it sums the upstream `Packages` `Size:` fields):
+
+| Component | Approx size |
+|---|---|
+| Debian 12 *bookworm* (main+contrib+non-free+non-free-firmware, +updates/+security) | ~150–250 GB |
+| Debian 13 *trixie* (same components) | ~150–250 GB |
+| Ubuntu 24.04 *noble* (main + **universe**, +updates/+security) | ~300–450 GB |
+| **Base OS subtotal** (the seed `mirror.list`) | **~0.6–0.9 TB** |
+| Third-party (each): PostgreSQL/PGDG ~7 GB·suite, Zabbix ~10 GB, HashiCorp/Docker/Grafana/etc. a few GB | tens of GB total |
+| Snapshots (hardlink) | ~0 until packages churn; budget ~10–20% headroom |
+| Sync working space + free-space floor (`MIN_FREE_GB`, default 50) | ≥ 50 GB free |
+
+**Sizing rule of thumb:**
+
+- **Minimum:** ~**1.5 TB** for the base OS + a handful of third-party repos with a little headroom.
+- **Recommended:** **2 TB** (the budget this kit targets) — comfortable for base OS + most catalog repos + snapshots + the free-space floor.
+- **Trim levers** if space is tight: drop a Debian release, drop Ubuntu `universe`, or drop `contrib`/`non-free`. Dropping third-party repos saves little (they're small).
+
+The disk-full **guard** aborts a sync below `MIN_FREE_GB`, and the dashboard shows live used/free/budget plus a per-repo size breakdown — so you can right-size before committing bandwidth.
+
 ## References
 
 - `docs/SERVER_SETUP.md` — **`setup-apt-mirror-server.sh`**  
