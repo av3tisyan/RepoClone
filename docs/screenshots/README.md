@@ -16,8 +16,11 @@ with no backend and no real hostnames — so the same shots are safe for the pub
    |------|------|
    | `overview.png` | Overview (KPIs, storage donut, "where the space goes", budget estimation, activity) |
    | `repositories.png` | Repositories (sortable table + size mini-bars, integrity check) |
+   | `catalog.png` | Catalog (one-click recommended repos by category) |
    | `add.png` | Add repository (paste-URL discover, presets, custom) |
-   | `sources.png` | Client sources (per-OS picker + one-liner) |
+
+Captured at **1600×900 (16:9)** @2× via headless Chrome:
+`"…/Google Chrome" --headless=new --force-device-scale-factor=2 --window-size=1600,900 --screenshot=overview.png "http://127.0.0.1:8080/?demo=1#overview"`
 
 4. Optional: capture both **dark** and **light** (theme toggle, top-right) — e.g. `overview-light.png`.
 

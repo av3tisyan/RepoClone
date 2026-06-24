@@ -9,8 +9,8 @@ The **mirror-manager** dashboard (add repos, sync, disk/budget, snapshots, clien
 | Overview | Repositories |
 |---|---|
 | ![Overview](docs/screenshots/overview.png) | ![Repositories](docs/screenshots/repositories.png) |
-| **Add a repository** | **Client sources** |
-| ![Add a repository](docs/screenshots/add.png) | ![Client sources](docs/screenshots/sources.png) |
+| **Catalog** | **Add a repository** |
+| ![Catalog](docs/screenshots/catalog.png) | ![Add a repository](docs/screenshots/add.png) |
 
 > Generate these from the built-in **demo mode** (`…/?demo=1`) — public-safe mock data, no
 > backend. See [`docs/screenshots/README.md`](docs/screenshots/README.md).
