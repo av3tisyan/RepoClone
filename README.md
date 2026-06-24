@@ -42,6 +42,25 @@ Split hosts: **`--role sync`** (connected) and **`--role airgap`** (isolated ngi
 
 Manual steps (if you prefer not to use the script) are outlined below.
 
+## Applying updates (existing host)
+
+After `git pull`, apply new code the **safe** way — installs the dashboard app + `/opt/apt/var`
+helper scripts and **restarts** the daemon (new Python only loads on restart), without touching
+your live `mirror.list`, keys, nginx certs, or units:
+
+```bash
+cd ~/apt-mirror && git pull
+sudo ./scripts/update-mirror-manager.sh
+# then hard-refresh the browser; dashboard → Server → Publish if setup.sh/landing changed
+```
+
+Rare changes are applied by hand (the script prints the exact commands): **systemd unit** →
+`cp` + `systemctl daemon-reload`; **nginx vhost** → review cert paths, `cp` + `nginx -t` +
+`reload`; **manager unit/user/sudoers** → re-run `setup-mirror-manager.sh`.
+
+> ⚠️ Do **not** re-run `setup-apt-mirror-server.sh` on a live host to "update" — it reinstalls
+> the base-only seed `mirror.list` and would wipe repos you added. It's for first-time bring-up.
+
 ## Manage repos via the web dashboard (optional)
 
 Instead of hand-editing `mirror.list`, install the **mirror-manager** on the sync host:
