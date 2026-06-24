@@ -70,7 +70,7 @@ install -m0644 "$ROOT/scripts/mirror-manager/mirror_manager.py" "$DEST/mirror_ma
 install -m0644 "$ROOT/scripts/mirror-manager/index.html"        "$DEST/index.html"
 install -m0644 "$ROOT/scripts/mirror-manager/presets.json"      "$DEST/presets.json"
 # Quick reference for the systemd Documentation= line.
-printf 'mirror-manager — see docs/MIRROR_MANAGER.md in the apt-mirror repo.\n' > "$DEST/README"
+printf 'mirror-manager — see docs/MIRROR_MANAGER.md in the RepoClone repo.\n' > "$DEST/README"
 
 echo "==> Validating app"
 python3 -c "import ast,sys; ast.parse(open('$DEST/mirror_manager.py').read())"

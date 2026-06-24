@@ -1,4 +1,4 @@
-# Air-gapped APT mirror (implementation kit)
+# RepoClone — air-gapped APT mirror kit
 
 **Version 1.0.0** — first stable release.
 
