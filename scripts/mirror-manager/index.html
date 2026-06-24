@@ -672,11 +672,16 @@ document.getElementById("srcGen").onclick=async()=>{
   list.innerHTML="";
   for(const g of SRC_GROUPS){
     const synced=g.synced!==false;
+    const base=g.base===true;
+    // base = always included (a client needs its OS) → checked+locked; unsynced → off+locked.
+    const checked = base || synced;
+    const locked = base || !synced;
     const suites=[...new Set(g.lines.map(l=>(/\]\s+\S+\s+(\S+)/.exec(l)||[])[1]).filter(Boolean))].join(", ");
-    const it=document.createElement("label");it.className="item";it.style.cursor=synced?"pointer":"not-allowed";if(!synced)it.style.opacity=".6";
-    it.innerHTML=`<div style="display:flex;align-items:center;gap:9px"><input type="checkbox" class="srcck" value="${esc(g.name)}" ${synced?"checked":"disabled"} style="width:auto">`
+    const it=document.createElement("label");it.className="item";it.style.cursor=locked?"default":"pointer";if(!synced&&!base)it.style.opacity=".6";
+    it.innerHTML=`<div style="display:flex;align-items:center;gap:9px"><input type="checkbox" class="srcck" value="${esc(g.name)}" data-base="${base?1:0}" ${checked?"checked":""} ${locked?"disabled":""} style="width:auto">`
       +`<b style="font-weight:600">${esc(g.name)}</b> ${g.managed?'<span class="tag m">managed</span>':'<span class="tag">manual</span>'}`
-      +`${synced?"":' <span class="tag" title="not mirrored yet — sync it first">not synced</span>'}</div>`
+      +`${base?' <span class="tag" title="base OS — always included">base</span>':''}`
+      +`${(!synced&&!base)?' <span class="tag" title="not mirrored yet — sync it first">not synced</span>':''}</div>`
       +`<div class="desc">${synced?(g.lines.length+" line(s) · "+esc(suites)):"not on the mirror yet — run a sync, then it appears here"}</div>`;
     list.appendChild(it);
   }
@@ -690,15 +695,14 @@ async function applySrc(){
   if(j.error){document.getElementById("srcOut").textContent="✗ "+j.error;return}
   LASTSRC=j;document.getElementById("srcOut").textContent=j.script;
   const has=sel.length>0;document.getElementById("srcDlList").disabled=!has;document.getElementById("srcDlScript").disabled=!has;
-  // Build the host one-liner: base is always included; pass only the ticked OPTIONAL repos.
-  const base=SRC_GROUPS.filter(g=>g.base).map(g=>g.name);
+  // Build the host one-liner: base OS is always included; args pick the OPTIONAL repos.
+  // Always explicit so it faithfully matches the ticks ("--none" = base only).
   const opt=SRC_GROUPS.filter(g=>!g.base).map(g=>g.name);
   const selOpt=sel.filter(n=>opt.includes(n));
   const url=(LAST&&LAST.public_url?LAST.public_url:"https://apt.example.com")+"/setup.sh";
-  const allOpt=selOpt.length===opt.length;
-  const cmd="curl -fsSL "+url+" | sudo sh"+(allOpt?"":(" -s -- "+(selOpt.join(" ")||"--list")));
-  document.getElementById("srcCmd").textContent=cmd;
-  document.getElementById("srcOneliner").style.display = has?"block":"none";
+  const args=selOpt.length?selOpt.join(" "):"--none";
+  document.getElementById("srcCmd").textContent="curl -fsSL "+url+" | sudo sh -s -- "+args;
+  document.getElementById("srcOneliner").style.display="block";
 }
 document.getElementById("srcAll").onclick=()=>{document.querySelectorAll(".srcck").forEach(c=>c.checked=true);applySrc()};
 document.getElementById("srcNone").onclick=()=>{document.querySelectorAll(".srcck").forEach(c=>c.checked=false);applySrc()};

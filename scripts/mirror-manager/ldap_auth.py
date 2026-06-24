@@ -11,7 +11,7 @@ Requires python-ldap:  sudo apt-get install -y python3-ldap
 
 Two bind models (set LDAP_BIND_MODE):
   direct  — bind straight as the user (AD UPN is simplest). LDAP_USER_DN_TEMPLATE uses
-            {user}, e.g. "{user}@example.com" (AD) or "uid={user},ou=people,dc=example,dc=com".
+            {user}, e.g. "{user}@example.com" (AD) or "uid={user},ou=people,dc=ex,dc=com".
   search  — bind a service account, search for the user, then rebind as the found DN.
             Needs LDAP_BIND_DN / LDAP_BIND_PW / LDAP_BASE_DN / LDAP_USER_FILTER.
 
