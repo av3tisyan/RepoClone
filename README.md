@@ -2,6 +2,19 @@
 
 Operational files for **`apt-mirror`** on **Debian 13**, **`/opt/apt`**, clients at **`https://apt.example.com`** (amd64, ~2 TB budget). The seed `config/mirror.list` mirrors only the **base OS** — **Debian 12/13** and **Ubuntu 24.04**; third-party repos (**Zabbix**, **HashiCorp**, **OpenProject**, **PostgreSQL**, **Docker**, **Grafana**, …) are added **on demand** from the mirror-manager dashboard (catalog / add-by-URL).
 
+## Screenshots
+
+The **mirror-manager** dashboard (add repos, sync, disk/budget, snapshots, client setup):
+
+| Overview | Repositories |
+|---|---|
+| ![Overview](docs/screenshots/overview.png) | ![Repositories](docs/screenshots/repositories.png) |
+| **Add a repository** | **Client sources** |
+| ![Add a repository](docs/screenshots/add.png) | ![Client sources](docs/screenshots/sources.png) |
+
+> Generate these from the built-in **demo mode** (`…/?demo=1`) — public-safe mock data, no
+> backend. See [`docs/screenshots/README.md`](docs/screenshots/README.md).
+
 ## Contents
 
 | Path | Purpose |
@@ -94,7 +107,7 @@ Logs: `sudo journalctl -u apt-mirror.service -b` and files under `/opt/apt/var/`
 3. `sudo cp deploy/nginx/apt.example.com.conf /etc/nginx/sites-available/` and `sudo ln -sf /etc/nginx/sites-available/apt.example.com.conf /etc/nginx/sites-enabled/`; adjust `ssl_certificate` paths in that file if needed
 4. `sudo nginx -t && sudo systemctl reload nginx`
 5. Point **DNS** `apt.example.com` at this host
-6. On each client: run **`scripts/setup-apt-client.sh`** (see `docs/CLIENT_SETUP.md`), or install snippets from `docs/examples/` manually (`docs/CLIENT_MIRROR_URLS.md`, `docs/CLIENT_SOURCES.md`, `docs/GPG_KEYS.md`)
+6. On each client: run **`scripts/setup-apt-client.sh`** (see `docs/CLIENT_SETUP.md`), generate sources from the dashboard **Client sources** view, or copy the per-vendor blocks from `docs/CLIENT_MIRROR_URLS.md`
 
 ## Storage
 

@@ -8,7 +8,7 @@ What apt checks: the archive signature on **`InRelease`/`Release`**, then packag
 
 ## Client configuration
 
-Use **`deb822`** `.sources` files with **`Signed-By=`** pointing at the right keyring file (see examples under `docs/examples/`). Avoid deprecated **`apt-key add`**. You may use **`/etc/apt/trusted.gpg.d/`** instead of **`Signed-By=`**, but **`Signed-By=`** per vendor is narrower trust.
+Use **`deb822`** `.sources` files with **`Signed-By=`** pointing at the right keyring file (see the per-vendor blocks in `docs/CLIENT_MIRROR_URLS.md`). Avoid deprecated **`apt-key add`**. You may use **`/etc/apt/trusted.gpg.d/`** instead of **`Signed-By=`**, but **`Signed-By=`** per vendor is narrower trust.
 
 For a **one-shot client configuration** (fetch keys + write `.sources`), use **`scripts/setup-apt-client.sh`** — see **`docs/CLIENT_SETUP.md`**.
 

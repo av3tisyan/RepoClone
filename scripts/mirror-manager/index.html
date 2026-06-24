@@ -458,13 +458,54 @@ function download(name,text){const b=new Blob([text],{type:"text/plain"});const 
 function setBar(id,frac){const b=document.getElementById(id);if(!b)return;const pct=Math.min(100,Math.max(0,frac*100));b.querySelector("span").style.width=pct+"%";b.className="bar"+(pct>=95?" bad":pct>=80?" warn":"")}
 function setOffline(b){document.getElementById("offlineBanner").classList.toggle("show",b)}
 
+// Demo mode (?demo=1 or #demo): render public-safe mock data, no backend — for screenshots.
+const DEMO=new URLSearchParams(location.search).get("demo")==="1"||location.hash==="#demo";
 async function api(path,opts){
+  if(DEMO)return demoApi(path,opts);
   try{
     const r=await fetch(API+path+(path.includes("?")?(qs?"&"+qs.slice(1):""):qs),opts);
     let j={};try{j=await r.json()}catch(e){}
     if(!r.ok&&!("ok" in j))j.error=j.error||("HTTP "+r.status);
     setOffline(false);return j;
   }catch(e){setOffline(true);return {error:"offline",__offline:true}}
+}
+function demoApi(path){
+  const now=Math.floor(Date.now()/1000);
+  const mk=(name,managed,base,size,suites,host,arch)=>({name,managed,base,enabled:true,health:true,
+    last_updated:now-3600*(2+size%20),size,hosts:[host],
+    deb:suites.map(su=>({suite:su,components:base?"main contrib non-free":"main",arch:arch||"amd64",url:"https://"+host+"/x"}))});
+  const managed=[
+    mk("docker",true,false,9.1e9,["bookworm","trixie","noble"],"download.docker.com"),
+    mk("grafana",true,false,4.3e9,["stable"],"apt.grafana.com"),
+    mk("postgresql",true,false,7.4e9,["bookworm-pgdg","trixie-pgdg"],"apt.postgresql.org"),
+    mk("zabbix-7.4",true,false,1.1e10,["bookworm","trixie","noble"],"repo.zabbix.com","amd64,all"),
+  ];
+  const manual=[
+    mk("deb.debian.org",false,true,5.9e11,["bookworm","bookworm-updates","trixie","trixie-updates"],"deb.debian.org"),
+    mk("security.debian.org",false,true,4.2e10,["bookworm-security","trixie-security"],"security.debian.org"),
+    mk("archive.ubuntu.com",false,true,4.6e11,["noble","noble-updates","noble-security"],"archive.ubuntu.com"),
+  ];
+  const total=[...managed,...manual].reduce((a,r)=>a+r.size,0);
+  const disk={total:2e12,used:1.24e12,free:7.6e11,budget:1.7e12,budget_used_pct:72.9,disk_used_pct:62};
+  if(path==="status")return Promise.resolve({disk,sync:{running:false,sub_state:"dead",last_exit:"0",finished:"Thu 2026-06-25 02:14:07"},
+    timer:{enabled:true,next:"Fri 2026-06-26 02:00:00",last:""},sizes_updated:now-1800,sizes_computing:false,
+    repos_total:total,public_url:"https://apt.example.com",min_free_gb:50,low_disk:false,managed,manual,mirror_list:"/opt/apt/manager/mirror.list"});
+  if(path==="presets")return Promise.resolve({presets:[
+    {id:"docker",label:"Docker CE",category:"Infrastructure",notes:"Component 'stable' only.",homepage:"#"},
+    {id:"grafana",label:"Grafana",category:"Monitoring",notes:"Single 'stable' suite.",homepage:"#"},
+    {id:"postgresql",label:"PostgreSQL (PGDG)",category:"Databases",notes:"postgresql-17 in 'main'.",homepage:"#"},
+    {id:"nginx",label:"nginx (nginx.org)",category:"Web",notes:"Component 'nginx'.",homepage:"#"},
+    {id:"tailscale",label:"Tailscale",category:"Infrastructure",notes:"Mesh VPN.",homepage:"#"}]});
+  if(path.startsWith("audit"))return Promise.resolve({entries:[
+    {ts:now-300,user:"jdoe",action:"add",detail:"docker (preset docker)",ip:"10.0.0.7"},
+    {ts:now-900,user:"jdoe",action:"sync",detail:"started",ip:"10.0.0.7"},
+    {ts:now-5400,user:"asmith",action:"snapshot-create",detail:"20260624-0200",ip:"10.0.0.9"},
+    {ts:now-9000,user:"jdoe",action:"toggle",detail:"grafana -> enabled",ip:"10.0.0.7"}]});
+  if(path==="snapshots")return Promise.resolve({snapshots:["20260622-0200","20260623-0200","20260624-0200"],bytes:3.1e9,creating:false});
+  if(path.startsWith("log"))return Promise.resolve({log:"[demo] mirror is up to date — no live sync in demo mode.",sync:{running:false},progress:{}});
+  if(path==="estimate-all")return Promise.resolve({total:1.18e12,free:7.6e11,budget:1.7e12,exceeds_budget:false,exceeds_free:true,
+    per:[{name:"deb.debian.org",bytes:5.9e11},{name:"archive.ubuntu.com",bytes:4.6e11},{name:"zabbix-7.4",bytes:1.1e10},{name:"postgresql",bytes:7.4e9},{name:"docker",bytes:9.1e9},{name:"grafana",bytes:4.3e9}]});
+  return Promise.resolve({ok:true});
 }
 
 // delegated copy

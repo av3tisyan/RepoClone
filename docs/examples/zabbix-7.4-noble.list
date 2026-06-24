@@ -1,2 +1,0 @@
-# Zabbix 7.4 on Ubuntu noble (release layout) — arch=amd64 avoids binary-all 404 on the mirror
-deb [arch=amd64 signed-by=/etc/apt/keyrings/zabbix.gpg] https://apt.example.com/repo.zabbix.com/zabbix/7.4/stable/ubuntu noble main

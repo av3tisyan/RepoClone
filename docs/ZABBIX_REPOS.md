@@ -39,7 +39,7 @@ Use **`/stable/`** in `config/mirror.list` and on clients (Zabbix documents stab
 
 **GPG:** `/etc/apt/keyrings/zabbix.gpg` — see `docs/GPG_KEYS.md`.
 
-**Client format:** `deb [arch=amd64 signed-by=…]` in `example-zabbix.list` — see `docs/examples/zabbix-7.4-noble.list`.
+**Client format:** `deb [arch=amd64 signed-by=…]` in `example-zabbix.list`.
 
 **Automation:** `setup-apt-client.sh --with-zabbix` (default `--zabbix-major 7.4` → **stable** path). For 7.0: `--zabbix-major 7.0`.
 

@@ -59,4 +59,4 @@ sudo chmod 0644 /etc/apt/keyrings/*.gpg
 
 Optional: verify **`SHA256SUMS`** against published checksums after download.
 
-Then use the same **`Signed-By=`** paths as in `docs/examples/` (paths under `/etc/apt/keyrings/` match).
+Then use the same **`Signed-By=`** paths as in `docs/CLIENT_MIRROR_URLS.md` (paths under `/etc/apt/keyrings/` match).

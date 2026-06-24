@@ -10,22 +10,19 @@ apt-mirror preserves upstream **host/path** segments under `/opt/apt/mirror/`, s
 find /opt/apt/mirror -name InRelease | head
 ```
 
-## Example files (`docs/examples/`)
+## Generate them — don't hand-write
 
-| Distro | Files |
-|--------|--------|
-| Debian 12 (bookworm) | `debian-bookworm.sources`, `debian-security-bookworm.sources` |
-| Debian 13 (trixie) | `debian-trixie.sources`, `debian-security-trixie.sources` |
-| Ubuntu 24.04 (noble) | `ubuntu-noble.sources` |
-| Zabbix 7.0 | `zabbix-7.0-*.list` — `.../zabbix/7.0/{ubuntu,debian}` |
-| Zabbix 7.4 | `zabbix-7.4-*.list` — `.../zabbix/7.4/stable/{ubuntu,debian}` (see `docs/ZABBIX_REPOS.md`) |
-| HashiCorp | `hashicorp-{bookworm,trixie,noble}.sources` |
-| OpenProject | `openproject-bookworm.list` — Debian 12 only, numeric suite `12` (see `docs/OPENPROJECT_REPO.md`) |
-| PostgreSQL (PGDG) | `postgresql-bookworm.list` — suite `<codename>-pgdg`, component `main` (see `docs/POSTGRESQL_REPO.md`) |
+Client sources are produced for you; there are no static snippet files to copy:
 
-Copy to `/etc/apt/sources.list.d/` and set **`Signed-By:`** to `/etc/apt/keyrings/...` (see `docs/CLIENT_MIRROR_URLS.md`). The examples under `docs/examples/` may still show `/usr/share/keyrings/`; prefer `/etc/apt/keyrings/` for consistency with `setup-apt-client.sh`.
+- **Dashboard → Client sources** (mirror-manager): pick the client OS, tick the repos, and
+  download a ready `/etc/apt/sources.list.d/example.list` + keyring-install script, or
+  copy the `curl … | sudo sh` bootstrap one-liner.
+- **`scripts/setup-apt-client.sh`** on the client: writes the `*.sources`/`.list` files and
+  fetches the keyrings (`--with-zabbix`, `--with-hashicorp`, `--with-openproject`,
+  `--with-postgresql`; see `docs/CLIENT_SETUP.md`).
 
-Adjust **`URIs=`** and filenames if you mirror **Zabbix 6.0** or multiple majors.
+Copy-paste `deb822` / one-line `deb` blocks for each repo (with the right `Signed-By=` keyring
+under `/etc/apt/keyrings/`) live in **`docs/CLIENT_MIRROR_URLS.md`**.
 
 ## Internal DNS
 

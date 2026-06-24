@@ -76,7 +76,6 @@ See `docs/MIRROR_HOST_KEYS.md` for how these files are published on the mirror h
 
 **Components:** `main contrib non-free non-free-firmware`
 
-**deb822 examples:** `docs/examples/debian-bookworm.sources`, `debian-security-bookworm.sources`, `debian-trixie.sources`, `debian-security-trixie.sources`
 
 ### Example: Debian 13 (trixie) main
 
@@ -108,7 +107,6 @@ Signed-By: /etc/apt/keyrings/debian-archive-keyring.gpg
 
 **Components:** `main universe` (no `restricted` — excludes NVIDIA drivers/intel-microcode/restricted firmware to save mirror space; add it back in `config/mirror.list` and here if your fleet needs it)
 
-**deb822 examples:** `docs/examples/ubuntu-noble.sources`
 
 ### Example: Ubuntu 24.04 (noble)
 
@@ -138,7 +136,6 @@ Default major in scripts: **7.4**. Path layout differs by version — see **`doc
 **Components:** `main`  
 **Format:** one-line **`deb [arch=amd64 signed-by=…]`** in a **`.list`** file (mirror is **amd64** only; without **`arch=amd64`**, apt requests **`binary-all`** and gets **404**)
 
-**Examples:** `docs/examples/zabbix-7.4-*.list`, `zabbix-7.0-*.list`
 
 ### Example: Zabbix 7.4 on Ubuntu noble
 
@@ -160,7 +157,6 @@ Only enable if the mirror syncs HashiCorp (see `config/mirror.list`) and you ins
 
 **Components:** `main`
 
-**deb822 examples:** `docs/examples/hashicorp-bookworm.sources`, `hashicorp-trixie.sources`, `hashicorp-noble.sources`
 
 ### Example: HashiCorp on Debian 12 (bookworm)
 
@@ -189,7 +185,6 @@ Only enable if the mirror syncs OpenProject (see `config/mirror.list`) and you i
 **Components:** `main`  
 **Format:** one-line **`deb [arch=amd64 signed-by=…]`** in a **`.list`** file (mirror is **amd64** only, no `binary-all`).
 
-**Example:** `docs/examples/openproject-bookworm.list`
 
 ### Example: OpenProject 17 on Debian 12 (bookworm)
 
@@ -213,7 +208,6 @@ Only enable if the mirror syncs PostgreSQL (see `config/mirror.list`) and you in
 
 **Format:** one-line **`deb [arch=amd64 signed-by=…]`** in a **`.list`** file (mirror is **amd64** only, no usable `binary-all`).
 
-**Example:** `docs/examples/postgresql-bookworm.list`
 
 ### Example: PostgreSQL on Debian 12 (bookworm)
 
