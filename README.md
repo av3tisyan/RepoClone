@@ -12,6 +12,12 @@ The **mirror-manager** dashboard (add repos, sync, disk/budget, snapshots, clien
 | **Catalog** | **Add a repository** |
 | ![Catalog](docs/screenshots/catalog.png) | ![Add a repository](docs/screenshots/add.png) |
 
+**Operations** — run a sync, generate client `sources.list`, and manage the server:
+
+| Sync | Client sources | Server |
+|---|---|---|
+| ![Sync](docs/screenshots/sync.png) | ![Client sources](docs/screenshots/sources.png) | ![Server](docs/screenshots/server.png) |
+
 > Generate these from the built-in **demo mode** (`…/?demo=1`) — public-safe mock data, no
 > backend. See [`docs/screenshots/README.md`](docs/screenshots/README.md).
 
