@@ -1,0 +1,1 @@
+deb [arch=amd64 signed-by=/etc/apt/keyrings/zabbix.gpg] https://apt.example.com/repo.zabbix.com/zabbix/7.4/stable/debian bookworm main

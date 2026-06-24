@@ -1,0 +1,28 @@
+[Unit]
+Description=apt-mirror manager (web dashboard for repos + disk usage)
+Documentation=file:///opt/apt/mirror-manager/README
+After=network.target
+
+[Service]
+Type=simple
+# Needs root: writes /etc/apt/mirror.list and /opt/apt/keys, starts apt-mirror.service.
+User=root
+WorkingDirectory=/opt/apt/mirror-manager
+ExecStart=/usr/bin/python3 /opt/apt/mirror-manager/mirror_manager.py
+Restart=on-failure
+RestartSec=3
+# Bind to localhost only; expose via SSH tunnel or the nginx auth proxy.
+Environment=MM_LISTEN_HOST=127.0.0.1
+Environment=MM_LISTEN_PORT=8080
+# Set a shared secret if you proxy it; clients pass ?token= or X-MM-Token.
+# Environment=MM_TOKEN=change-me
+# Environment=MM_BUDGET_BYTES=1700000000000
+
+# Light hardening (cannot fully sandbox: it must write /etc/apt and /opt/apt).
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ReadWritePaths=/etc/apt /opt/apt
+
+[Install]
+WantedBy=multi-user.target

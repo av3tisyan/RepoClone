@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily apt-mirror synchronization
+Requires=apt-mirror.service
+
+[Timer]
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+RandomizedDelaySec=30m
+
+[Install]
+WantedBy=timers.target

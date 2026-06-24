@@ -1,0 +1,753 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APT Mirror Manager</title>
+<style>
+  :root{
+    --bg:#0a0d13; --surface:#11151d; --surface2:#151b25; --surface3:#1b222e;
+    --line:#222a37; --line2:#2c3645; --fg:#e7edf4; --fg2:#c2ccd8; --muted:#8593a3;
+    --primary:#4f8cff; --primary-2:#3b74e0; --ok:#2ea043; --warn:#d29922; --bad:#f85149;
+    --radius:12px; --radius-sm:8px; --sb:236px; --shadow:0 8px 30px rgba(0,0,0,.35);
+    --ok-bg:rgba(46,160,67,.13); --warn-bg:rgba(210,153,34,.14); --bad-bg:rgba(248,81,73,.13); --pri-bg:rgba(79,140,255,.13);
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  a{color:var(--primary);text-decoration:none} a:hover{text-decoration:underline}
+  code{font:12px/1.4 ui-monospace,Menlo,Consolas,monospace;background:#0b0f16;border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:var(--fg2)}
+  :focus-visible{outline:2px solid var(--primary);outline-offset:2px;border-radius:6px}
+
+  /* ---- app shell ---- */
+  #app{display:grid;grid-template-columns:var(--sb) 1fr;min-height:100vh}
+  .sidebar{background:var(--surface);border-right:1px solid var(--line);display:flex;flex-direction:column;position:sticky;top:0;height:100vh}
+  .brand{display:flex;align-items:center;gap:10px;padding:18px 18px 14px}
+  .brand .logo{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--primary),#7aa9ff);display:grid;place-items:center;color:#fff;flex:0 0 auto}
+  .brand b{font-size:14px;font-weight:650;letter-spacing:.01em}
+  .brand .sub{font-size:11px;color:var(--muted)}
+  nav.side{padding:6px 10px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+  .nav-item{display:flex;align-items:center;gap:11px;width:100%;padding:9px 11px;border:0;background:transparent;color:var(--fg2);border-radius:9px;cursor:pointer;font:inherit;text-align:left}
+  .nav-item:hover{background:var(--surface2);color:var(--fg)}
+  .nav-item.active{background:var(--pri-bg);color:#cfe0ff}
+  .nav-item svg{width:17px;height:17px;flex:0 0 auto;opacity:.9}
+  .nav-sect{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:14px 12px 6px}
+  .side-foot{margin-top:auto;padding:12px 14px;border-top:1px solid var(--line);font-size:11px;color:var(--muted);word-break:break-all}
+
+  .content{display:flex;flex-direction:column;min-width:0}
+  .topbar{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:14px;padding:13px 24px;background:rgba(10,13,19,.82);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+  .topbar h1{font-size:16px;margin:0;font-weight:600}
+  .spacer{flex:1}
+  main#main{padding:24px;max-width:1180px;width:100%;margin:0 auto}
+  .view{display:none;animation:fade .18s ease}
+  .view.active{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+  /* ---- primitives ---- */
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:18px}
+  .panel h2{margin:0 0 16px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);display:flex;align-items:center;gap:10px}
+  .panel h2 .right{margin-left:auto;display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .grid-kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin-bottom:18px}
+  .kpi{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+  .kpi .label{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+  .kpi .val{font-size:26px;font-weight:650;margin-top:6px;letter-spacing:-.01em}
+  .kpi .sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .bar{height:8px;background:#0b0f16;border-radius:99px;overflow:hidden;border:1px solid var(--line)}
+  .bar>span{display:block;height:100%;background:linear-gradient(90deg,var(--primary),#7aa9ff);transition:width .5s ease}
+  .bar.warn>span{background:linear-gradient(90deg,var(--warn),#f0c14b)}
+  .bar.bad>span{background:linear-gradient(90deg,var(--bad),#ff7b72)}
+  .stat{font-size:13px;color:var(--muted);margin-bottom:8px}
+  .stat b{color:var(--fg)}
+
+  table{width:100%;border-collapse:collapse}
+  th,td{text-align:left;padding:11px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+  thead th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em;border-bottom-color:var(--line2)}
+  td.r,th.r{text-align:right;white-space:nowrap}
+  tr.repo:hover{background:var(--surface2);cursor:pointer}
+  .src{color:var(--muted);font-size:12px}
+
+  .tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:99px;border:1px solid var(--line2);color:var(--muted);vertical-align:middle}
+  .tag.m{color:#9cc0ff;border-color:#345;background:var(--pri-bg)}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:8px;vertical-align:middle}
+  .dot.ok{background:var(--ok)} .dot.bad{background:var(--bad)} .dot.off{background:var(--muted)} .dot.unk{background:var(--line2)} .dot.warn{background:var(--warn)}
+  .pill{font-size:12px;padding:3px 11px;border-radius:99px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px}
+  .pill.run{background:var(--warn-bg);color:#f0c14b} .pill.idle{background:var(--ok-bg);color:#6cdd8b}
+  .pill .dot{margin:0}
+
+  button{font:inherit;font-weight:550;background:var(--primary);color:#fff;border:0;border-radius:var(--radius-sm);padding:9px 15px;cursor:pointer;transition:filter .12s,background .12s}
+  button:hover{filter:brightness(1.08)} button:active{filter:brightness(.95)}
+  button.ghost{background:var(--surface2);border:1px solid var(--line2);color:var(--fg)}
+  button.ghost:hover{background:var(--surface3);filter:none}
+  button.sm{padding:5px 11px;font-size:12px}
+  button.danger{background:transparent;border:1px solid var(--bad);color:#ff8a82}
+  button.danger:hover{background:var(--bad-bg);filter:none}
+  button:disabled{opacity:.45;cursor:not-allowed}
+
+  label{display:block;font-size:12px;color:var(--muted);margin:12px 0 5px}
+  input,select,textarea{width:100%;background:#0b0f16;color:var(--fg);border:1px solid var(--line2);border-radius:var(--radius-sm);padding:9px 11px;font:inherit}
+  input::placeholder{color:#5b6776}
+  input:focus,select:focus{border-color:var(--primary);outline:none;box-shadow:0 0 0 3px var(--pri-bg)}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
+  .row>div{flex:1;min-width:150px}
+  .hint{font-size:12px;color:var(--muted);margin-top:6px}
+
+  pre{background:#080b11;border:1px solid var(--line);border-radius:var(--radius-sm);padding:13px;overflow:auto;white-space:pre-wrap;font:12px/1.5 ui-monospace,Menlo,Consolas,monospace;color:#aebacc}
+  pre#log{max-height:360px}
+  .probe{font-size:12px;margin-top:10px;color:var(--muted);white-space:pre-wrap}
+  .copywrap{position:relative} .copywrap>button{position:absolute;top:8px;right:8px}
+  .msg{font-size:13px;padding:9px 13px;border-radius:var(--radius-sm);margin-top:12px;display:none}
+  .msg.ok{display:block;background:var(--ok-bg);color:#6cdd8b} .msg.err{display:block;background:var(--bad-bg);color:#ff8a82}
+  .empty{padding:26px;text-align:center;color:var(--muted)}
+
+  /* catalog */
+  .catgroup h3{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:18px 0 10px}
+  .catgroup:first-child h3{margin-top:0}
+  .cat{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:13px}
+  .cat .item{border:1px solid var(--line);border-radius:var(--radius);padding:14px;background:var(--surface2);display:flex;flex-direction:column;gap:8px}
+  .cat .item:hover{border-color:var(--line2)}
+  .cat .item h4{margin:0;font-size:14px;font-weight:600}
+  .cat .item .desc{font-size:12px;color:var(--muted);flex:1;line-height:1.4}
+  .cat .item .actions{display:flex;gap:10px;align-items:center}
+
+  /* modal */
+  #modal{position:fixed;inset:0;background:rgba(4,6,10,.66);display:none;align-items:center;justify-content:center;z-index:40;padding:22px}
+  #modal.show{display:flex}
+  .card{background:var(--surface);border:1px solid var(--line2);border-radius:14px;padding:22px;max-width:660px;width:100%;max-height:88vh;overflow:auto;box-shadow:var(--shadow)}
+  .card:focus{outline:none}
+  .card h3{margin:0 0 12px;font-size:17px;display:flex;align-items:center;gap:8px}
+  .kv{display:grid;grid-template-columns:130px 1fr;gap:7px 14px;font-size:13px;margin:12px 0}
+  .kv .k{color:var(--muted)}
+  .sp{flex:1}
+
+  /* toasts + offline */
+  #toasts{position:fixed;right:20px;bottom:20px;display:flex;flex-direction:column;gap:9px;z-index:60}
+  .toast{padding:11px 15px;border-radius:10px;font-size:13px;box-shadow:var(--shadow);animation:slide .2s ease;max-width:380px}
+  .toast.ok{background:#0e2a1a;color:#a7f3c0;border:1px solid #1f5132}
+  .toast.err{background:#2a1314;color:#fca5a5;border:1px solid #5a2326}
+  @keyframes slide{from{transform:translateY(8px);opacity:0}to{transform:none;opacity:1}}
+  #offlineBanner{position:fixed;top:0;left:0;right:0;z-index:70;background:var(--bad);color:#fff;text-align:center;padding:8px;font-size:13px;font-weight:550;display:none}
+  #offlineBanner.show{display:block}
+  .muted{color:var(--muted)}
+
+  @media (max-width:860px){
+    #app{grid-template-columns:1fr}
+    .sidebar{position:static;height:auto;flex-direction:row;flex-wrap:wrap;align-items:center}
+    .brand{padding:12px 16px}
+    nav.side{flex-direction:row;flex-wrap:wrap;flex:1;padding:8px}
+    .nav-sect,.side-foot{display:none}
+    .nav-item{width:auto}
+    main#main{padding:16px}
+    .grid2{grid-template-columns:1fr}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="offlineBanner" role="alert">Connection to the manager lost — retrying…</div>
+
+<div id="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+      </span>
+      <span><b>APT Mirror</b><div class="sub">control plane</div></span>
+    </div>
+    <nav class="side" aria-label="Sections">
+      <button class="nav-item" data-view="overview"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>Overview</button>
+      <button class="nav-item" data-view="repos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>Repositories</button>
+      <button class="nav-item" data-view="catalog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="8" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/><rect x="13" y="13" width="8" height="8" rx="1"/></svg>Catalog</button>
+      <button class="nav-item" data-view="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Add repository</button>
+      <div class="nav-sect">Operations</div>
+      <button class="nav-item" data-view="sync"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-8-5"/><path d="M3 12a9 9 0 0 1 9-9 9 9 0 0 1 8 5"/><path d="M21 4v4h-4M3 20v-4h4"/></svg>Sync</button>
+      <button class="nav-item" data-view="sources"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v5h5"/><path d="M14 3H6v18h12V8z"/><path d="M9 13h6M9 17h6"/></svg>Client sources</button>
+      <button class="nav-item" data-view="server"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="7" rx="1"/><rect x="3" y="13" width="18" height="7" rx="1"/><path d="M7 8h.01M7 17h.01"/></svg>Server</button>
+    </nav>
+    <div class="side-foot"><span id="listPath"></span></div>
+  </aside>
+
+  <div class="content">
+    <header class="topbar">
+      <h1 id="viewTitle">Overview</h1>
+      <span class="spacer"></span>
+      <span id="syncPill" class="pill idle"><span class="dot"></span>idle</span>
+      <button class="sm" id="quickSync">Sync now</button>
+    </header>
+
+    <main id="main">
+      <!-- OVERVIEW -->
+      <section id="view-overview" class="view active" aria-label="Overview">
+        <div class="grid-kpi">
+          <div class="kpi"><div class="label">Disk used</div><div class="val" id="kDisk">–</div><div class="sub" id="kDiskSub">of –</div></div>
+          <div class="kpi"><div class="label">Free space</div><div class="val" id="kFree">–</div><div class="sub">on the mirror volume</div></div>
+          <div class="kpi"><div class="label">Budget</div><div class="val" id="kBudget">–</div><div class="sub" id="kBudgetSub">of –</div></div>
+          <div class="kpi"><div class="label">Repositories</div><div class="val" id="kRepos">–</div><div class="sub" id="kReposSub">configured</div></div>
+        </div>
+        <div class="panel">
+          <h2>Storage</h2>
+          <div class="grid2">
+            <div><div class="stat">Disk <b id="diskUsed">–</b> / <b id="diskTotal">–</b> · <b id="diskFree">–</b> free · mirror data <b id="reposTotal">–</b></div><div class="bar" id="diskBar"><span style="width:0"></span></div></div>
+            <div><div class="stat">Budget <b id="budUsed">–</b> / <b id="budTotal">–</b> (<b id="budPct">–</b>)</div><div class="bar" id="budBar"><span style="width:0"></span></div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <h2>Sync status <span class="right"><span class="muted" id="ovTimer"></span></span></h2>
+          <div class="stat" id="ovSyncState">–</div>
+        </div>
+        <div class="panel">
+          <h2>Snapshots <span class="right">
+            <button class="ghost sm" id="snapCreate">Create</button>
+            <button class="ghost sm" id="snapPrune">Prune…</button>
+          </span></h2>
+          <div class="stat" id="snapInfo">—</div>
+          <div id="snapList" class="src"></div>
+        </div>
+        <div class="panel">
+          <h2>Recent activity <span class="right"><button class="ghost sm" id="auditRefresh">refresh</button></span></h2>
+          <div id="auditList"><div class="empty">—</div></div>
+        </div>
+      </section>
+
+      <!-- REPOSITORIES -->
+      <section id="view-repos" class="view" aria-label="Repositories">
+        <div class="panel">
+          <h2>Repositories
+            <span class="muted" id="sizesAge" style="text-transform:none;font-weight:400;letter-spacing:0"></span>
+            <span class="right">
+              <input id="filter" placeholder="filter…" aria-label="Filter repositories" style="width:170px">
+              <button class="ghost sm" id="refreshSizes">Recompute sizes</button>
+            </span>
+          </h2>
+          <table>
+            <thead><tr><th>Repository</th><th>Suites / components</th><th class="r">Updated</th><th class="r">Size</th><th></th></tr></thead>
+            <tbody id="repoRows"><tr><td colspan="5" class="empty">loading…</td></tr></tbody>
+          </table>
+        </div>
+        <div class="panel">
+          <h2>Integrity check <span class="right"><button class="sm" id="verifyBtn">Verify now</button></span></h2>
+          <div class="stat">Validates each mirrored suite's <code>InRelease</code> signature and the SHA256 of the index files on disk — catches corrupt or partial syncs.</div>
+          <div id="verifyOut"><div class="empty">not run yet</div></div>
+        </div>
+      </section>
+
+      <!-- CATALOG -->
+      <section id="view-catalog" class="view" aria-label="Catalog">
+        <div class="panel">
+          <h2>Recommended repositories <span class="muted" style="text-transform:none;font-weight:400;letter-spacing:0">· one-click add</span></h2>
+          <div id="catalog"><div class="empty">loading…</div></div>
+        </div>
+      </section>
+
+      <!-- ADD -->
+      <section id="view-add" class="view" aria-label="Add repository">
+        <div class="panel">
+          <h2>Add by URL</h2>
+          <label for="smartUrl">Paste a repository URL — auto-detect everything</label>
+          <div class="row">
+            <div style="flex:4"><input id="smartUrl" placeholder="https://repo.example.com/apt   (the repo root, above /dists)"></div>
+            <div style="flex:0;white-space:nowrap"><button id="discoverBtn">Discover</button></div>
+          </div>
+          <div class="probe" id="discoverOut"></div>
+        </div>
+        <div class="panel">
+          <h2>Preset or manual</h2>
+          <label for="preset">Preset</label>
+          <select id="preset"><option value="">— custom repository —</option></select>
+          <div id="presetNote" class="probe"></div>
+          <div id="customFields" style="display:none">
+            <div class="row">
+              <div><label for="cName">Name</label><input id="cName" placeholder="myrepo"></div>
+              <div style="flex:2"><label for="cUrl">Base URL (repo root, above /dists)</label><input id="cUrl" placeholder="https://example.com/repo"></div>
+            </div>
+            <div class="row">
+              <div><label for="cSuite">Suite(s) (space-separated)</label><input id="cSuite" placeholder="bookworm"></div>
+              <div><label for="cComp">Components</label><input id="cComp" placeholder="main"></div>
+              <div><label for="cArch">Arch</label><input id="cArch" placeholder="amd64"></div>
+            </div>
+            <label for="cKey">Key URL (armored/binary; optional)</label><input id="cKey" placeholder="https://example.com/repo/key.asc">
+            <div style="margin-top:10px"><button class="ghost sm" id="probeBtn">Probe &amp; validate</button></div>
+            <div class="probe" id="probeOut"></div>
+          </div>
+          <div class="row" style="margin-top:16px">
+            <div style="flex:0;white-space:nowrap"><button class="ghost sm" id="estimateBtn">Estimate size</button></div>
+            <div class="probe" id="estimateOut" style="margin:0"></div>
+          </div>
+          <div class="row" style="margin-top:14px">
+            <div style="flex:0;white-space:nowrap"><label style="margin:0;color:var(--fg)"><input type="checkbox" id="doSync" checked style="width:auto;vertical-align:middle"> sync after adding</label></div>
+            <div style="flex:0"><button id="addBtn">Add / update</button></div>
+            <div style="flex:0"><button class="ghost" id="resetForm">Reset</button></div>
+          </div>
+          <div class="msg" id="addMsg" role="status"></div>
+        </div>
+      </section>
+
+      <!-- SYNC -->
+      <section id="view-sync" class="view" aria-label="Sync">
+        <div class="panel">
+          <h2>Sync
+            <span class="right">
+              <span class="muted" id="timerInfo"></span>
+              <button class="ghost sm" id="timerBtn">timer</button>
+              <button class="sm" id="syncBtn">Sync now</button>
+            </span>
+          </h2>
+          <div class="stat" id="syncState" role="status">–</div>
+          <div class="bar" id="progBar" style="display:none;margin-bottom:12px"><span style="width:0"></span></div>
+          <pre id="log" aria-label="Sync log" tabindex="0">…</pre>
+        </div>
+      </section>
+
+      <!-- CLIENT SOURCES -->
+      <section id="view-sources" class="view" aria-label="Client sources">
+        <div class="panel">
+          <h2>Generate client sources
+            <span class="right">
+              <select id="srcCodename" aria-label="Client OS" style="width:auto">
+                <option value="bookworm">Debian 12 (bookworm)</option>
+                <option value="trixie">Debian 13 (trixie)</option>
+                <option value="noble">Ubuntu 24.04 (noble)</option>
+              </select>
+              <button class="sm" id="srcGen">Generate</button>
+            </span>
+          </h2>
+          <div class="stat">Pick a client OS → <b>Generate</b>, then tick exactly the repos to include. Produces a ready <code>/etc/apt/sources.list.d/example.list</code> + keyring-install script.</div>
+          <div id="srcRepos" style="display:none;margin:6px 0 14px">
+            <div class="row" style="align-items:center;margin-bottom:8px">
+              <div style="flex:0;white-space:nowrap"><b style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em">Repositories</b></div>
+              <div style="flex:0"><button class="ghost sm" id="srcAll">all</button></div>
+              <div style="flex:0"><button class="ghost sm" id="srcNone">none</button></div>
+            </div>
+            <div id="srcRepoList" class="cat"></div>
+          </div>
+          <div class="copywrap"><pre id="srcOut">choose a client OS → Generate</pre><button class="ghost sm" data-copy="srcOut">copy</button></div>
+          <div id="srcOneliner" style="display:none;margin-top:12px">
+            <div class="stat">Or run this one-liner on the host (base OS always included; the ticked optional repos are passed as args):</div>
+            <div class="copywrap"><pre id="srcCmd"></pre><button class="ghost sm" data-copy="srcCmd">copy</button></div>
+          </div>
+          <div class="row" style="margin-top:12px">
+            <div style="flex:0"><button class="ghost sm" id="srcDlList" disabled>Download .list</button></div>
+            <div style="flex:0"><button class="ghost sm" id="srcDlScript" disabled>Download install.sh</button></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SERVER -->
+      <section id="view-server" class="view" aria-label="Server">
+        <div class="panel">
+          <h2>Server — mirror.list &amp; setup <span class="right"><button class="sm" id="srvLoad">Load</button></span></h2>
+          <div class="stat" id="srvPath">the live <code>mirror.list</code> this manager maintains, plus commands to bootstrap another mirror server.</div>
+          <div class="copywrap"><pre id="srvList">click Load</pre><button class="ghost sm" data-copy="srvList">copy</button></div>
+          <div class="row" style="margin-top:12px">
+            <div style="flex:0"><button class="ghost sm" id="srvDl" disabled>Download mirror.list</button></div>
+            <div style="flex:0"><button class="ghost sm" id="srvBackup">Download config backup (.tgz)</button></div>
+          </div>
+          <div class="hint">Backup = mirror.list + keyrings + tunables + units (DR rebuild bundle, not the data). Keep it off-box; restore with <code>scripts/mirror-backup.sh restore</code>.</div>
+          <div class="copywrap" style="margin-top:12px"><pre id="srvCmds" style="display:none"></pre><button class="ghost sm" data-copy="srvCmds" id="srvCmdsCopy" style="display:none">copy</button></div>
+        </div>
+        <div class="panel">
+          <h2>Client landing page &amp; bootstrap
+            <span class="right">
+              <button class="ghost sm" id="setupPreview">Preview setup.sh</button>
+              <button class="ghost sm" id="landingPreview">Preview page</button>
+              <button class="sm" id="landingPublish">Publish</button>
+            </span>
+          </h2>
+          <div class="stat">Publishes a human-readable index <b>and</b> a <code>setup.sh</code> bootstrap to <code>MM_WWW_DIR</code> (served by nginx at the mirror root, synced to the airgap host with /opt/apt). Clients then run:</div>
+          <div class="copywrap"><pre id="oneliner">curl -fsSL .../setup.sh | sudo sh</pre><button class="ghost sm" data-copy="oneliner">copy</button></div>
+          <div class="msg" id="landingMsg" role="status"></div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div id="modal" role="dialog" aria-modal="true" aria-hidden="true"><div class="card" id="modalCard"></div></div>
+<div id="toasts" aria-live="polite" aria-atomic="false"></div>
+
+<script>
+const TOKEN=new URLSearchParams(location.search).get("token")||"";
+const qs=TOKEN?("?token="+encodeURIComponent(TOKEN)):"";
+const BASE=location.pathname.replace(/[^/]*$/,"");
+const API=BASE+"api/";
+const hdr=()=>({"Content-Type":"application/json","X-MM":"1",...(TOKEN?{"X-MM-Token":TOKEN}:{})});
+const NAV={overview:"Overview",repos:"Repositories",catalog:"Catalog",add:"Add repository",sync:"Sync",sources:"Client sources",server:"Server"};
+let PRESETS=[],LAST=null,LASTFOCUS=null;
+
+function fmt(b){if(b==null)return "–";const u=["B","KB","MB","GB","TB","PB"];let i=0,n=b;while(n>=1024&&i<u.length-1){n/=1024;i++}return n.toFixed(n<10&&i>0?1:0)+" "+u[i]}
+function ago(t){if(!t)return "never";const s=Math.max(0,Date.now()/1000-t);if(s<90)return "just now";if(s<5400)return Math.round(s/60)+"m ago";if(s<172800)return Math.round(s/3600)+"h ago";return Math.round(s/86400)+"d ago"}
+function esc(s){return (s==null?"":""+s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]))}
+function toast(msg,ok=true){const t=document.createElement("div");t.className="toast "+(ok?"ok":"err");t.textContent=msg;document.getElementById("toasts").appendChild(t);setTimeout(()=>{t.style.opacity="0";setTimeout(()=>t.remove(),300)},ok?3500:6000)}
+function download(name,text){const b=new Blob([text],{type:"text/plain"});const u=URL.createObjectURL(b);const a=document.createElement("a");a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();URL.revokeObjectURL(u)}
+function setBar(id,frac){const b=document.getElementById(id);if(!b)return;const pct=Math.min(100,Math.max(0,frac*100));b.querySelector("span").style.width=pct+"%";b.className="bar"+(pct>=95?" bad":pct>=80?" warn":"")}
+function setOffline(b){document.getElementById("offlineBanner").classList.toggle("show",b)}
+
+async function api(path,opts){
+  try{
+    const r=await fetch(API+path+(path.includes("?")?(qs?"&"+qs.slice(1):""):qs),opts);
+    let j={};try{j=await r.json()}catch(e){}
+    if(!r.ok&&!("ok" in j))j.error=j.error||("HTTP "+r.status);
+    setOffline(false);return j;
+  }catch(e){setOffline(true);return {error:"offline",__offline:true}}
+}
+
+// delegated copy
+document.addEventListener("click",e=>{const b=e.target.closest&&e.target.closest("[data-copy]");if(!b)return;const el=document.getElementById(b.dataset.copy);if(el)navigator.clipboard.writeText(el.textContent).then(()=>toast("copied"))});
+
+// ---- navigation ----
+function setView(v){if(!NAV[v])v="overview";
+  document.querySelectorAll(".view").forEach(s=>s.classList.toggle("active",s.id==="view-"+v));
+  document.querySelectorAll(".nav-item").forEach(b=>{const on=b.dataset.view===v;b.classList.toggle("active",on);b.setAttribute("aria-current",on?"page":"false")});
+  document.getElementById("viewTitle").textContent=NAV[v];
+  if(location.hash!=="#"+v)history.replaceState(null,"","#"+v);
+  window.scrollTo(0,0);
+}
+document.querySelectorAll(".nav-item").forEach(b=>b.onclick=()=>setView(b.dataset.view));
+window.addEventListener("hashchange",()=>setView(location.hash.slice(1)));
+
+// ---- modal ----
+function modal(html){const m=document.getElementById("modal");document.getElementById("modalCard").innerHTML=html;m.classList.add("show");m.setAttribute("aria-hidden","false");LASTFOCUS=document.activeElement;const c=document.getElementById("modalCard");c.setAttribute("tabindex","-1");c.focus()}
+function closeModal(){const m=document.getElementById("modal");m.classList.remove("show");m.setAttribute("aria-hidden","true");if(LASTFOCUS&&LASTFOCUS.focus)LASTFOCUS.focus()}
+document.getElementById("modal").onclick=e=>{if(e.target.id==="modal")closeModal()};
+document.addEventListener("keydown",e=>{if(e.key==="Escape"&&document.getElementById("modal").classList.contains("show"))closeModal()});
+function flash(id,text,ok){const e=document.getElementById(id);if(!e)return;e.textContent=text;e.className="msg "+(ok?"ok":"err")}
+
+// ---- status refresh ----
+async function refresh(){
+  const s=await api("status");if(s.__offline||s.error){return}LAST=s;
+  document.getElementById("listPath").textContent=s.mirror_list;
+  if(s.public_url){const ol=document.getElementById("oneliner");if(ol)ol.textContent="curl -fsSL "+s.public_url+"/setup.sh | sudo sh"}
+  const d=s.disk;
+  document.getElementById("kDisk").textContent=fmt(d.used);
+  document.getElementById("kDiskSub").textContent="of "+fmt(d.total);
+  document.getElementById("kFree").textContent=fmt(d.free);
+  document.getElementById("kFree").style.color=s.low_disk?"var(--bad)":"";
+  document.getElementById("kFree").title=s.low_disk?("below MM_MIN_FREE_GB="+s.min_free_gb+" GB — syncs are blocked"):"";
+  document.getElementById("kBudget").textContent=(d.budget_used_pct??"–")+"%";
+  document.getElementById("kBudgetSub").textContent=fmt(d.used)+" of "+fmt(d.budget);
+  document.getElementById("kRepos").textContent=(s.managed.length+s.manual.length);
+  document.getElementById("kReposSub").textContent=s.managed.length+" managed · "+s.manual.length+" manual";
+  document.getElementById("diskUsed").textContent=fmt(d.used);
+  document.getElementById("diskTotal").textContent=fmt(d.total);
+  document.getElementById("diskFree").textContent=fmt(d.free);
+  document.getElementById("reposTotal").textContent=fmt(s.repos_total);
+  document.getElementById("budUsed").textContent=fmt(d.used);
+  document.getElementById("budTotal").textContent=fmt(d.budget);
+  document.getElementById("budPct").textContent=(d.budget_used_pct??"–")+"%";
+  setBar("diskBar",d.used/d.total); setBar("budBar",d.used/d.budget);
+
+  const pill=document.getElementById("syncPill");
+  pill.innerHTML='<span class="dot"></span>'+(s.sync.running?"syncing…":"idle");
+  pill.className="pill "+(s.sync.running?"run":"idle");
+  document.getElementById("syncBtn").disabled=s.sync.running;
+  document.getElementById("quickSync").disabled=s.sync.running;
+  const ss=s.sync.running?("Running ("+s.sync.sub_state+")"):("Idle. Last finished: "+(s.sync.finished||"unknown")+(s.sync.last_exit!==""?" · exit "+s.sync.last_exit:""));
+  document.getElementById("syncState").textContent=ss;
+  document.getElementById("ovSyncState").textContent=ss;
+  const t=s.timer||{};
+  const ti=t.enabled?("timer on · next "+(t.next||"?")):"timer off";
+  document.getElementById("timerInfo").textContent=ti;
+  document.getElementById("ovTimer").textContent=ti;
+  document.getElementById("timerBtn").textContent=t.enabled?"disable timer":"enable timer";
+  document.getElementById("sizesAge").textContent=s.sizes_computing?"· computing sizes…":(s.sizes_updated?"· sizes "+ago(s.sizes_updated):"· sizes not computed");
+  renderRepos(s); renderCatalog(); renderAudit(); renderSnapshots();
+}
+
+async function renderSnapshots(){
+  const el=document.getElementById("snapInfo"); if(!el) return;
+  const j=await api("snapshots"); if(j.error) return;
+  const base=(LAST&&LAST.public_url)||"";
+  el.innerHTML=(j.creating?'<span class="pill run"><span class="dot"></span>creating…</span> ':'')
+    +`${j.snapshots.length} snapshot(s) · ${fmt(j.bytes)} · served at <code>${esc(base)}/snapshots/</code>`;
+  document.getElementById("snapList").innerHTML=j.snapshots.length
+    ? j.snapshots.slice().reverse().map(s=>`<div>${esc(s)}</div>`).join("")
+    : '<span class="muted">no snapshots yet — Create makes a hardlink point-in-time copy (near-zero space)</span>';
+}
+document.getElementById("snapCreate").onclick=async()=>{
+  const j=await api("snapshots",{method:"POST",headers:hdr(),body:"{}"});
+  toast(j.ok?"snapshot creating in background…":(j.message||j.error||"failed"), j.ok); setTimeout(renderSnapshots,1000);
+};
+document.getElementById("snapPrune").onclick=async()=>{
+  const k=prompt("Keep how many of the newest snapshots? (older ones are deleted)","4"); if(k===null) return;
+  const j=await api("snapshots/prune",{method:"POST",headers:hdr(),body:JSON.stringify({keep:parseInt(k,10)||4})});
+  toast(j.ok?"pruned":(j.error||"failed"), j.ok); renderSnapshots();
+};
+
+async function renderAudit(){
+  const el=document.getElementById("auditList"); if(!el) return;
+  const j=await api("audit?n=30"); if(j.error) return;
+  const e=(j.entries||[]).slice().reverse();
+  if(!e.length){ el.innerHTML='<div class="empty">no activity yet</div>'; return; }
+  el.innerHTML='<table><thead><tr><th>When</th><th>User</th><th>Action</th><th>Detail</th><th class="r">From</th></tr></thead><tbody>'
+    +e.map(x=>`<tr><td class="src">${ago(x.ts)}</td><td>${esc(x.user)}</td><td><span class="tag">${esc(x.action)}</span></td><td class="src">${esc(x.detail||"")}</td><td class="r src">${esc(x.ip)}</td></tr>`).join("")
+    +'</tbody></table>';
+}
+document.getElementById("auditRefresh").onclick=renderAudit;
+
+function rowHealth(r){
+  if(!r.enabled)return '<span class="dot off" title="disabled"></span>';
+  if(r.health===true)return '<span class="dot ok" title="Release present"></span>';
+  if(r.health===false)return '<span class="dot bad" title="not synced yet / missing Release"></span>';
+  return '<span class="dot unk" title="not on disk yet"></span>';
+}
+function renderRepos(s){
+  const f=(document.getElementById("filter").value||"").toLowerCase();
+  const tb=document.getElementById("repoRows");tb.innerHTML="";
+  const rows=[...s.managed,...s.manual].filter(r=>!f||r.name.toLowerCase().includes(f)||r.hosts.join(" ").includes(f));
+  if(!rows.length){tb.innerHTML='<tr><td colspan="5" class="empty">no repositories</td></tr>';return}
+  for(const repo of rows){
+    const suites=[...new Set(repo.deb.map(x=>x.suite))].join(", ");
+    const comps=[...new Set(repo.deb.flatMap(x=>x.components.split(/\s+/)))].join(" ");
+    const tr=document.createElement("tr");tr.className="repo";
+    tr.innerHTML=`<td>${rowHealth(repo)}${esc(repo.name)} ${repo.managed?'<span class="tag m">managed</span>':'<span class="tag">manual</span>'}${repo.enabled?'':' <span class="tag">disabled</span>'}<div class="src">${esc(repo.hosts.join(", "))}</div></td>`
+      +`<td>${esc(suites)}<div class="src">${esc(comps)}</div></td>`
+      +`<td class="r src">${ago(repo.last_updated)}</td><td class="r">${fmt(repo.size)}</td>`
+      +`<td class="r"><button class="ghost sm" data-info="${esc(repo.name)}">details</button></td>`;
+    tr.querySelector("[data-info]").onclick=e=>{e.stopPropagation();openRepo(repo.name)};
+    tr.onclick=()=>openRepo(repo.name);
+    tb.appendChild(tr);
+  }
+}
+document.getElementById("filter").oninput=()=>{if(LAST)renderRepos(LAST)};
+
+function renderCatalog(){
+  const wrap=document.getElementById("catalog");if(!wrap)return;
+  const configured=new Set((LAST?LAST.managed:[]).map(r=>r.name));
+  const byCat={};for(const p of PRESETS){(byCat[p.category||"Other"]=byCat[p.category||"Other"]||[]).push(p)}
+  const order=["Base OS","Monitoring","Infrastructure","Databases","Development","Web","Applications","Other"];
+  const cats=Object.keys(byCat).sort((a,b)=>{const i=order.indexOf(a),j=order.indexOf(b);return (i<0?99:i)-(j<0?99:j)});
+  wrap.innerHTML="";
+  for(const cat of cats){
+    const g=document.createElement("div");g.className="catgroup";g.innerHTML=`<h3>${esc(cat)}</h3>`;
+    const grid=document.createElement("div");grid.className="cat";
+    for(const p of byCat[cat]){
+      const done=configured.has(p.id);
+      const it=document.createElement("div");it.className="item";
+      it.innerHTML=`<h4>${esc(p.label)}</h4><div class="desc">${esc(p.notes||"")}</div>`
+        +`<div class="actions">${done?'<span class="tag m">configured ✓</span>':`<button class="sm" data-add="${esc(p.id)}">Add</button>`}`
+        +`${p.homepage?` <a class="src" href="${esc(p.homepage)}" target="_blank" rel="noopener">home ↗</a>`:""}</div>`;
+      grid.appendChild(it);
+    }
+    g.appendChild(grid);wrap.appendChild(g);
+  }
+  wrap.querySelectorAll("[data-add]").forEach(b=>b.onclick=()=>addPreset(b.dataset.add));
+}
+
+// ---- repo detail ----
+async function openRepo(name){
+  const r=await api("repo?name="+encodeURIComponent(name));if(r.error){toast(r.error,false);return}
+  const c=r.client||{};
+  const debRows=r.deb.map(d=>`<tr><td>${esc(d.suite)}</td><td>${esc(d.components)}</td><td class="src">${esc(d.arch||"")}</td></tr>`).join("");
+  const psz=(r.path_sizes||[]).map(p=>`<div class="src">${esc(p.path)} — ${fmt(p.bytes)}</div>`).join("")||'<div class="src">nothing on disk yet</div>';
+  const lines=(c.lines||[]).join("\n");
+  const mgmt=r.managed?`<button class="ghost sm" id="mToggle">${r.enabled?"Disable":"Enable"}</button><button class="ghost sm" id="mEdit">Edit in form</button><button class="danger sm" id="mRemove">Remove…</button>`:'<span class="muted">manual repo — edit mirror.list directly</span>';
+  modal(`<h3>${rowHealth(r)}${esc(r.name)} ${r.managed?'<span class="tag m">managed</span>':'<span class="tag">manual</span>'}</h3>
+    <div class="kv">
+      <div class="k">Hosts</div><div>${esc(r.hosts.join(", "))}</div>
+      <div class="k">On disk</div><div>${fmt(r.size)} · updated ${ago(r.last_updated)} · health ${r.health===true?"ok":r.health===false?"missing":"n/a"}</div>
+      ${r.preset?`<div class="k">Preset</div><div>${esc(r.preset)}</div>`:""}${r.key?`<div class="k">Key</div><div>${esc(r.key)}</div>`:""}
+    </div>
+    <table style="margin:8px 0"><thead><tr><th>Suite</th><th>Components</th><th>Arch</th></tr></thead><tbody>${debRows}</tbody></table>
+    <div class="src" style="margin-top:6px">Disk paths:</div>${psz}
+    <h3 style="margin-top:18px;font-size:14px">Client configuration</h3>
+    <div class="copywrap"><pre id="ccLines">${esc(lines||"(no deb lines)")}</pre><button class="ghost sm" data-copy="ccLines">copy</button></div>
+    ${c.command?`<div class="src" style="margin-top:8px">or with the helper script:</div><div class="copywrap"><pre id="ccCmd">${esc(c.command)}</pre><button class="ghost sm" data-copy="ccCmd">copy</button></div>`:""}
+    <div class="src" style="margin-top:8px">key for clients: <a href="${esc(c.key_url||"")}">${esc(c.key_url||"")}</a></div>
+    <div class="row" style="margin-top:18px"><div class="sp"></div>${mgmt}<button class="ghost sm" id="mClose">Close</button></div>`);
+  document.getElementById("mClose").onclick=closeModal;
+  if(r.managed){
+    document.getElementById("mToggle").onclick=async()=>{const j=await api("repos/toggle?name="+encodeURIComponent(name),{method:"POST",headers:hdr()});if(j.ok){toast((j.enabled?"enabled ":"disabled ")+name);closeModal();refresh()}else toast(j.error||"failed",false)};
+    document.getElementById("mEdit").onclick=()=>{editInForm(r);closeModal()};
+    document.getElementById("mRemove").onclick=()=>removeRepo(name);
+  }
+}
+
+function removeRepo(name){
+  modal(`<h3>Remove ${esc(name)}?</h3>
+    <p class="muted">Removes the repository from <code>mirror.list</code>. You can also purge its downloaded files to reclaim disk (deletes only this repo's paths).</p>
+    <div class="row" style="margin-top:18px"><div class="sp"></div>
+      <button class="ghost sm" id="rCancel">Cancel</button>
+      <button class="ghost sm" id="rKeep">Remove, keep files</button>
+      <button class="danger sm" id="rPurge">Remove + purge files</button></div>`);
+  const go=async(purge)=>{closeModal();const j=await api("repos?name="+encodeURIComponent(name)+"&purge="+(purge?"1":"0"),{method:"DELETE",headers:hdr()});if(j.ok)toast("removed "+name+(purge?(" · freed "+fmt(j.freed)):""));else toast(j.error||j.message||"failed",false);refresh()};
+  document.getElementById("rCancel").onclick=closeModal;
+  document.getElementById("rKeep").onclick=()=>go(false);
+  document.getElementById("rPurge").onclick=()=>go(true);
+}
+
+function editInForm(r){
+  setView("add");
+  document.getElementById("preset").value="";togglePreset();
+  document.getElementById("cName").value=r.name;
+  document.getElementById("cUrl").value=[...new Set(r.deb.map(d=>d.url))][0]||"";
+  document.getElementById("cSuite").value=[...new Set(r.deb.map(d=>d.suite))].join(" ");
+  document.getElementById("cComp").value=r.deb[0]?r.deb[0].components:"main";
+  document.getElementById("cArch").value=(r.deb[0]&&/arch=([^\s\]]+)/.exec(r.deb[0].arch||"")||[])[1]||"amd64";
+  toast("loaded "+r.name+" into the form — adjust and Add/update");
+}
+
+// ---- add / preset / discover ----
+function togglePreset(){const p=PRESETS.find(x=>x.id===document.getElementById("preset").value);
+  document.getElementById("customFields").style.display=p?"none":"block";
+  document.getElementById("presetNote").textContent=p?(p.notes||""):"";
+  document.getElementById("estimateOut").textContent=""}
+document.getElementById("preset").onchange=togglePreset;
+function addBody(){const presetId=document.getElementById("preset").value;if(presetId)return {preset_id:presetId};
+  return {custom:{name:document.getElementById("cName").value.trim(),base_url:document.getElementById("cUrl").value.trim(),
+    suites:document.getElementById("cSuite").value.trim().split(/\s+/).filter(Boolean),
+    components:document.getElementById("cComp").value.trim().split(/\s+/).filter(Boolean),
+    arch:document.getElementById("cArch").value.trim()||"amd64",key_url:document.getElementById("cKey").value.trim()}}}
+
+document.getElementById("discoverBtn").onclick=async()=>{
+  const url=document.getElementById("smartUrl").value.trim();const out=document.getElementById("discoverOut");
+  if(!url){out.textContent="Enter a repository URL.";return}
+  const btn=document.getElementById("discoverBtn");btn.disabled=true;out.textContent="discovering "+url+" … (matching presets, probing suites + key)";
+  const j=await api("discover?url="+encodeURIComponent(url));btn.disabled=false;
+  if(j.error){out.textContent="✗ "+j.error;return}
+  if(j.matched_preset){document.getElementById("preset").value=j.matched_preset;togglePreset();
+    out.textContent="✓ recognised as preset: "+(j.label||j.matched_preset)+(j.note?("\n  "+j.note):"")+"\n→ review and click Add / update.";toast("matched preset "+j.matched_preset);return}
+  document.getElementById("preset").value="";togglePreset();
+  const suites=(j.suites||[]).map(s=>s.suite);const comps=[...new Set((j.suites||[]).flatMap(s=>s.components))];
+  const hasAll=(j.suites||[]).some(s=>String(s.arch).includes("all"));
+  document.getElementById("cName").value=j.name||"";document.getElementById("cUrl").value=j.base_url||url;
+  document.getElementById("cSuite").value=suites.join(" ");document.getElementById("cComp").value=comps.join(" ");
+  document.getElementById("cArch").value=hasAll?"amd64,all":"amd64";document.getElementById("cKey").value=j.key_url||"";
+  if(suites.length){out.textContent="✓ found "+suites.length+" suite(s): "+suites.join(", ")+"\n  components: "+(comps.join(" ")||"main")+"   arch: "+(hasAll?"amd64,all":"amd64")+"\n  key: "+(j.key_url||"not auto-found — paste a key URL below if needed")+"\n→ review the fields below and click Add / update.";toast("discovered "+suites.length+" suite(s)")}
+  else out.textContent="⚠ "+(j.warning||"nothing found")+"\nFilled the base URL below — set suite/components manually.";
+};
+
+document.getElementById("probeBtn").onclick=async()=>{
+  const base=document.getElementById("cUrl").value.trim();const suite=document.getElementById("cSuite").value.trim().split(/\s+/)[0];const out=document.getElementById("probeOut");
+  if(!base||!suite){out.textContent="Enter base URL and at least one suite.";return}
+  out.textContent="probing "+base+" / "+suite+" …";
+  const j=await api("probe?base_url="+encodeURIComponent(base)+"&suite="+encodeURIComponent(suite));
+  if(!j.ok){out.textContent="✗ "+(j.error||"probe failed");return}
+  let t="✓ components: "+(j.components||[]).join(" ")+"\n  architectures: "+(j.architectures||[]).join(" ")+"\n  non-empty (amd64): "+(j.nonempty_components.join(" ")||"none")+"\n  binary-all: "+(j.has_binary_all?"yes":"no")+"  → suggested arch: "+j.suggested_arch;
+  if(j.warning)t+="\n  ⚠ "+j.warning;out.textContent=t;
+  if(!document.getElementById("cComp").value)document.getElementById("cComp").value=(j.nonempty_components[0]||(j.components||["main"])[0]);
+  if(!document.getElementById("cArch").value||document.getElementById("cArch").value==="amd64")document.getElementById("cArch").value=j.suggested_arch;
+};
+document.getElementById("estimateBtn").onclick=async()=>{
+  const out=document.getElementById("estimateOut");out.textContent="estimating (downloading indexes)…";
+  const j=await api("estimate",{method:"POST",headers:hdr(),body:JSON.stringify(addBody())});
+  if(j.error){out.textContent="✗ "+j.error;return}
+  out.innerHTML="≈ <b>"+fmt(j.bytes)+"</b> to download · "+fmt(j.free)+" free"+(j.exceeds_free?' · <span style="color:var(--bad)">exceeds free space!</span>':"");
+};
+document.getElementById("addBtn").onclick=async()=>{
+  const body=addBody();body.sync=document.getElementById("doSync").checked;
+  if(!body.preset_id&&(!body.custom.base_url||!body.custom.suites.length)){toast("Base URL and suite are required.",false);return}
+  document.getElementById("addBtn").disabled=true;
+  const j=await api("repos",{method:"POST",headers:hdr(),body:JSON.stringify(body)});
+  document.getElementById("addBtn").disabled=false;
+  if(j.ok){toast("Added "+j.added+(j.key?" · "+j.key:"")+(j.sync?" · "+j.sync:""));flash("addMsg","Added "+j.added,true);refresh()}
+  else{toast(j.error||"failed",false);flash("addMsg","Error: "+(j.error||"failed"),false)}
+};
+document.getElementById("resetForm").onclick=()=>{document.getElementById("preset").value="";togglePreset();["cName","cUrl","cSuite","cComp","cArch","cKey","smartUrl"].forEach(i=>document.getElementById(i).value="");document.getElementById("probeOut").textContent="";document.getElementById("estimateOut").textContent="";document.getElementById("discoverOut").textContent=""};
+
+async function addPreset(id){
+  const p=PRESETS.find(x=>x.id===id);
+  modal(`<h3>Add “${esc(p?p.label:id)}”?</h3><p class="muted">${esc(p?(p.notes||""):"")}</p><p class="muted">The key is fetched, the lines are written to mirror.list, and a sync starts.</p>
+    <div class="row" style="margin-top:18px"><div class="sp"></div><button class="ghost sm" id="aNo">Cancel</button><button class="sm" id="aYes">Add &amp; sync</button></div>`);
+  document.getElementById("aNo").onclick=closeModal;
+  document.getElementById("aYes").onclick=async()=>{closeModal();const j=await api("repos",{method:"POST",headers:hdr(),body:JSON.stringify({preset_id:id,sync:true})});if(j.ok)toast("Added "+j.added+(j.key?" · "+j.key:"")+(j.sync?" · "+j.sync:""));else toast(j.error||"failed",false);refresh()};
+}
+
+// ---- sync / timer / sizes ----
+document.getElementById("syncBtn").onclick=doSync;
+document.getElementById("quickSync").onclick=doSync;
+async function doSync(){const j=await api("sync",{method:"POST",headers:hdr()});toast(j.ok?"Sync started":("Sync: "+(j.message||j.error)),j.ok);refresh()}
+document.getElementById("timerBtn").onclick=async()=>{const want=!(LAST&&LAST.timer&&LAST.timer.enabled);const j=await api("timer/toggle",{method:"POST",headers:hdr(),body:JSON.stringify({enable:want})});toast(j.ok?("timer "+(want?"enabled":"disabled")):"failed",j.ok);refresh()};
+document.getElementById("refreshSizes").onclick=async()=>{await api("sizes/refresh",{method:"POST",headers:hdr()});toast("recomputing sizes…");setTimeout(refresh,800)};
+
+// ---- sources / server ----
+let LASTSRC=null,SRC_GROUPS=[],SRC_CN="bookworm";
+document.getElementById("srcGen").onclick=async()=>{
+  SRC_CN=document.getElementById("srcCodename").value;
+  const out=document.getElementById("srcOut");out.textContent="generating…";
+  const j=await api("sources?codename="+encodeURIComponent(SRC_CN));if(j.error){out.textContent="✗ "+j.error;return}
+  SRC_GROUPS=j.groups||[];
+  const box=document.getElementById("srcRepos"),list=document.getElementById("srcRepoList");
+  if(!SRC_GROUPS.length){box.style.display="none";out.textContent="# no mirrored repos apply to "+SRC_CN;
+    document.getElementById("srcDlList").disabled=true;document.getElementById("srcDlScript").disabled=true;return}
+  list.innerHTML="";
+  for(const g of SRC_GROUPS){
+    const synced=g.synced!==false;
+    const suites=[...new Set(g.lines.map(l=>(/\]\s+\S+\s+(\S+)/.exec(l)||[])[1]).filter(Boolean))].join(", ");
+    const it=document.createElement("label");it.className="item";it.style.cursor=synced?"pointer":"not-allowed";if(!synced)it.style.opacity=".6";
+    it.innerHTML=`<div style="display:flex;align-items:center;gap:9px"><input type="checkbox" class="srcck" value="${esc(g.name)}" ${synced?"checked":"disabled"} style="width:auto">`
+      +`<b style="font-weight:600">${esc(g.name)}</b> ${g.managed?'<span class="tag m">managed</span>':'<span class="tag">manual</span>'}`
+      +`${synced?"":' <span class="tag" title="not mirrored yet — sync it first">not synced</span>'}</div>`
+      +`<div class="desc">${synced?(g.lines.length+" line(s) · "+esc(suites)):"not on the mirror yet — run a sync, then it appears here"}</div>`;
+    list.appendChild(it);
+  }
+  box.style.display="block";
+  list.querySelectorAll(".srcck").forEach(c=>c.onchange=applySrc);
+  applySrc();
+};
+async function applySrc(){
+  const sel=[...document.querySelectorAll(".srcck:checked")].map(c=>c.value);
+  const j=await api("sources",{method:"POST",headers:hdr(),body:JSON.stringify({codename:SRC_CN,repos:sel})});
+  if(j.error){document.getElementById("srcOut").textContent="✗ "+j.error;return}
+  LASTSRC=j;document.getElementById("srcOut").textContent=j.script;
+  const has=sel.length>0;document.getElementById("srcDlList").disabled=!has;document.getElementById("srcDlScript").disabled=!has;
+  // Build the host one-liner: base is always included; pass only the ticked OPTIONAL repos.
+  const base=SRC_GROUPS.filter(g=>g.base).map(g=>g.name);
+  const opt=SRC_GROUPS.filter(g=>!g.base).map(g=>g.name);
+  const selOpt=sel.filter(n=>opt.includes(n));
+  const url=(LAST&&LAST.public_url?LAST.public_url:"https://apt.example.com")+"/setup.sh";
+  const allOpt=selOpt.length===opt.length;
+  const cmd="curl -fsSL "+url+" | sudo sh"+(allOpt?"":(" -s -- "+(selOpt.join(" ")||"--list")));
+  document.getElementById("srcCmd").textContent=cmd;
+  document.getElementById("srcOneliner").style.display = has?"block":"none";
+}
+document.getElementById("srcAll").onclick=()=>{document.querySelectorAll(".srcck").forEach(c=>c.checked=true);applySrc()};
+document.getElementById("srcNone").onclick=()=>{document.querySelectorAll(".srcck").forEach(c=>c.checked=false);applySrc()};
+document.getElementById("srcDlList").onclick=()=>{if(LASTSRC)download("example.list",LASTSRC.list+"\n")};
+document.getElementById("srcDlScript").onclick=()=>{if(LASTSRC)download("install-"+LASTSRC.codename+".sh",LASTSRC.script+"\n")};
+let LASTSRV=null;
+document.getElementById("srvLoad").onclick=async()=>{const j=await api("server-setup");if(j.error){toast(j.error,false);return}
+  LASTSRV=j;document.getElementById("srvPath").innerHTML="path: <code>"+esc(j.path)+"</code>";document.getElementById("srvList").textContent=j.mirror_list||"(empty)";
+  const c=document.getElementById("srvCmds");c.style.display="block";c.textContent=j.commands;document.getElementById("srvCmdsCopy").style.display="inline-block";document.getElementById("srvDl").disabled=false};
+document.getElementById("srvDl").onclick=()=>{if(LASTSRV)download("mirror.list",LASTSRV.mirror_list)};
+document.getElementById("srvBackup").onclick=()=>{window.open(API+"backup"+qs,"_blank","noopener")};
+
+// ---- integrity ----
+document.getElementById("verifyBtn").onclick=async()=>{
+  const out=document.getElementById("verifyOut");out.innerHTML='<div class="empty">verifying… (hashing indexes, may take a moment)</div>';
+  const j=await api("verify");if(j.error){out.innerHTML='<div class="empty">✗ '+esc(j.error)+'</div>';return}
+  const badge=s=>{const c={ok:"ok",fail:"bad",warn:"warn",missing:"off"}[s]||"unk";return '<span class="dot '+c+'"></span>'+esc(s)};
+  const rows=j.results.map(r=>`<tr><td>${esc(r.repo)}</td><td>${esc(r.suite)}</td><td>${esc(r.signature)}</td><td class="r">${r.checked}</td><td class="r">${r.mismatch.length}</td><td>${badge(r.status)}</td></tr>`).join("");
+  const sm=j.summary||{};
+  out.innerHTML=`<div class="stat">${sm.ok||0} ok · ${sm.warn||0} warn · ${sm.fail||0} fail · ${sm.missing||0} missing</div>`
+    +`<table><thead><tr><th>Repository</th><th>Suite</th><th>Signature</th><th class="r">Indexes</th><th class="r">Mismatch</th><th>Status</th></tr></thead><tbody>${rows||'<tr><td colspan=6 class="empty">nothing on disk to verify</td></tr>'}</tbody></table>`;
+  toast(sm.fail?(sm.fail+" suite(s) FAILED verification"):"verification complete",!sm.fail);
+};
+
+// ---- landing page + bootstrap ----
+document.getElementById("oneliner").textContent="curl -fsSL "+(LAST&&LAST.public_url?LAST.public_url:"https://apt.example.com")+"/setup.sh | sudo sh";
+document.getElementById("landingPreview").onclick=()=>{window.open(API+"landing"+qs,"_blank","noopener")};
+document.getElementById("setupPreview").onclick=()=>{window.open(API+"setup"+qs,"_blank","noopener")};
+document.getElementById("landingPublish").onclick=async()=>{
+  const j=await api("landing",{method:"POST",headers:hdr()});
+  if(j.ok){document.getElementById("oneliner").textContent=j.oneliner||document.getElementById("oneliner").textContent;
+    flash("landingMsg","Published index.html + setup.sh → "+esc(j.url),true);toast("landing page + setup.sh published")}
+  else{flash("landingMsg","Error: "+(j.error||"failed"),false);toast(j.error||"failed",false)}
+};
+
+// ---- log polling ----
+async function pollLog(){
+  const j=await api("log?lines=300");if(j.error)return;
+  const pre=document.getElementById("log");const atBottom=pre.scrollTop+pre.clientHeight>=pre.scrollHeight-30;
+  pre.textContent=j.log||"(no log yet)";if(atBottom)pre.scrollTop=pre.scrollHeight;
+  const pb=document.getElementById("progBar");const p=j.progress||{};
+  if(j.sync&&j.sync.running&&p.percent!=null){pb.style.display="block";pb.querySelector("span").style.width=p.percent+"%"}else pb.style.display="none";
+  if(j.sync&&j.sync.running&&p.phase)document.getElementById("syncState").textContent="Running · "+p.phase;
+}
+
+async function loadPresets(){const j=await api("presets");PRESETS=j.presets||[];const sel=document.getElementById("preset");for(const p of PRESETS){const o=document.createElement("option");o.value=p.id;o.textContent=p.label;sel.appendChild(o)}}
+
+setView(location.hash.slice(1)||"overview");
+loadPresets().then(()=>{togglePreset();refresh();setInterval(refresh,5000);pollLog();setInterval(pollLog,3000)});
+</script>
+</body>
+</html>

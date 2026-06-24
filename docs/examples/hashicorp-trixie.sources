@@ -1,0 +1,5 @@
+Types: deb
+URIs: https://apt.example.com/apt.releases.hashicorp.com
+Suites: trixie
+Components: main
+Signed-By: /etc/apt/keyrings/hashicorp.gpg

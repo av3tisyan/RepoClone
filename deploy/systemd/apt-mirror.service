@@ -1,0 +1,25 @@
+[Unit]
+Description=Mirror APT repositories (apt-mirror)
+Documentation=man:apt-mirror(8)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=root
+# Tunables for the disk-full guard (MIN_FREE_GB, MIRROR_BASE) — optional ('-' = ok if absent).
+EnvironmentFile=-/etc/default/apt-mirror
+# Disk-full guard wraps apt-mirror: aborts the run if free space is below MIN_FREE_GB, else
+# execs apt-mirror (reads /etc/apt/mirror.list). Installed by setup-apt-mirror-server.sh;
+# falls back to plain apt-mirror if the guard script isn't present.
+ExecStart=/bin/sh -c 'if [ -x /opt/apt/var/apt-mirror-guard.sh ]; then exec /opt/apt/var/apt-mirror-guard.sh; else exec /usr/bin/apt-mirror; fi'
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+# Large mirrors can run for many hours
+TimeoutStartSec=0
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,40 @@
+[Unit]
+Description=LDAPS auth backend for nginx auth_request (apt-manager dashboard)
+Documentation=file:///opt/apt/mirror-manager/README
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Runs on the reverse-proxy host (where apt-manager.example.com nginx lives).
+# No special privileges needed — it only talks to LDAPS and answers localhost.
+DynamicUser=yes
+WorkingDirectory=/opt/apt/mirror-manager
+ExecStart=/usr/bin/python3 /opt/apt/mirror-manager/ldap_auth.py
+Restart=on-failure
+RestartSec=3
+
+Environment=LA_LISTEN_HOST=127.0.0.1
+Environment=LA_LISTEN_PORT=8889
+# ---- set these for your directory ----
+Environment=LDAP_URI=ldaps://dc.example.com:636
+Environment=LDAP_BIND_MODE=direct
+Environment=LDAP_USER_DN_TEMPLATE={user}@example.com
+# Optional: restrict to a group, verify the LDAPS cert against a CA, etc.
+# Environment=LDAP_REQUIRED_GROUP=CN=apt-admins,OU=Groups,DC=example,DC=com
+# Environment=LDAP_CA=/etc/ssl/certs/example-root-ca.pem
+# Environment=LDAP_TLS_REQCERT=demand
+# ---- search-mode alternative (service account) ----
+# Environment=LDAP_BIND_MODE=search
+# Environment=LDAP_BIND_DN=CN=svc-apt,OU=Service,DC=example,DC=com
+# Environment=LDAP_BIND_PW=change-me
+# Environment=LDAP_BASE_DN=DC=example,DC=com
+# Environment=LDAP_USER_FILTER=(sAMAccountName={user})
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

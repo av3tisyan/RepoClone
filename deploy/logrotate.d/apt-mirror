@@ -1,0 +1,9 @@
+/opt/apt/var/*.log {
+    weekly
+    rotate 12
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

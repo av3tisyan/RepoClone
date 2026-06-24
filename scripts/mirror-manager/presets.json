@@ -1,0 +1,202 @@
+{
+  "_comment": "Repo catalog for mirror-manager. Each preset expands into apt-mirror 'deb'/'clean' lines plus a GPG key. Suites/components/keys here were verified against upstream. key.kind: 'url' = curl + dearmor-if-armored; 'archive' = Debian/Ubuntu archive keyring (populate-mirror-keys.sh). Keep in sync with config/mirror.list. arch: use 'amd64,all' when the repo's Release lists the 'all' architecture.",
+  "presets": [
+    {
+      "id": "debian",
+      "label": "Debian (bookworm + trixie)",
+      "category": "Base OS",
+      "homepage": "https://www.debian.org/",
+      "notes": "Base OS. Key is the Debian archive keyring (run populate-mirror-keys.sh).",
+      "key": { "name": "debian-archive-keyring.gpg", "kind": "archive" },
+      "entries": [
+        { "base_url": "http://deb.debian.org/debian", "suites": ["bookworm", "bookworm-updates", "trixie", "trixie-updates"], "components": ["main", "contrib", "non-free", "non-free-firmware"], "arch": "amd64" },
+        { "base_url": "http://security.debian.org/debian-security", "suites": ["bookworm-security", "trixie-security"], "components": ["main", "contrib", "non-free", "non-free-firmware"], "arch": "amd64" }
+      ],
+      "clean": ["http://deb.debian.org/debian", "http://security.debian.org/debian-security"]
+    },
+    {
+      "id": "ubuntu",
+      "label": "Ubuntu 24.04 (noble)",
+      "category": "Base OS",
+      "homepage": "https://ubuntu.com/",
+      "notes": "Base OS. main + universe only. Key is the Ubuntu archive keyring (run populate-mirror-keys.sh).",
+      "key": { "name": "ubuntu-archive-keyring.gpg", "kind": "archive" },
+      "entries": [
+        { "base_url": "http://archive.ubuntu.com/ubuntu", "suites": ["noble", "noble-updates", "noble-security"], "components": ["main", "universe"], "arch": "amd64" }
+      ],
+      "clean": ["http://archive.ubuntu.com/ubuntu"]
+    },
+    {
+      "id": "zabbix-7.4",
+      "label": "Zabbix 7.4 (stable)",
+      "category": "Monitoring",
+      "homepage": "https://www.zabbix.com/",
+      "notes": "stable/ layout has both binary-amd64 and binary-all.",
+      "key": { "name": "zabbix.gpg", "kind": "url", "url": "https://repo.zabbix.com/zabbix-official-repo.key" },
+      "entries": [
+        { "base_url": "https://repo.zabbix.com/zabbix/7.4/stable/ubuntu", "suites": ["noble"], "components": ["main"], "arch": "amd64,all" },
+        { "base_url": "https://repo.zabbix.com/zabbix/7.4/stable/debian", "suites": ["bookworm", "trixie"], "components": ["main"], "arch": "amd64,all" }
+      ],
+      "clean": ["https://repo.zabbix.com/zabbix/7.4/stable/ubuntu", "https://repo.zabbix.com/zabbix/7.4/stable/debian"]
+    },
+    {
+      "id": "zabbix-7.0",
+      "label": "Zabbix 7.0 (legacy layout)",
+      "category": "Monitoring",
+      "homepage": "https://www.zabbix.com/",
+      "notes": "7.0/6.0 use .../zabbix/<ver>/{ubuntu,debian} (no stable/).",
+      "key": { "name": "zabbix.gpg", "kind": "url", "url": "https://repo.zabbix.com/zabbix-official-repo.key" },
+      "entries": [
+        { "base_url": "https://repo.zabbix.com/zabbix/7.0/ubuntu", "suites": ["noble"], "components": ["main"], "arch": "amd64,all" },
+        { "base_url": "https://repo.zabbix.com/zabbix/7.0/debian", "suites": ["bookworm", "trixie"], "components": ["main"], "arch": "amd64,all" }
+      ],
+      "clean": ["https://repo.zabbix.com/zabbix/7.0/ubuntu", "https://repo.zabbix.com/zabbix/7.0/debian"]
+    },
+    {
+      "id": "grafana",
+      "label": "Grafana",
+      "category": "Monitoring",
+      "homepage": "https://grafana.com/",
+      "notes": "Single 'stable' suite, component main.",
+      "key": { "name": "grafana.gpg", "kind": "url", "url": "https://apt.grafana.com/gpg.key" },
+      "entries": [
+        { "base_url": "https://apt.grafana.com", "suites": ["stable"], "components": ["main"], "arch": "amd64" }
+      ],
+      "clean": ["https://apt.grafana.com"]
+    },
+    {
+      "id": "elastic-8",
+      "label": "Elastic 8.x (Elasticsearch / Kibana)",
+      "category": "Monitoring",
+      "homepage": "https://www.elastic.co/",
+      "notes": "Elastic Stack 8.x. suite 'stable', component main.",
+      "key": { "name": "elastic.gpg", "kind": "url", "url": "https://artifacts.elastic.co/GPG-KEY-elasticsearch" },
+      "entries": [
+        { "base_url": "https://artifacts.elastic.co/packages/8.x/apt", "suites": ["stable"], "components": ["main"], "arch": "amd64" }
+      ],
+      "clean": ["https://artifacts.elastic.co/packages/8.x/apt"]
+    },
+    {
+      "id": "hashicorp",
+      "label": "HashiCorp (Terraform, Vault, Consul, …)",
+      "category": "Infrastructure",
+      "homepage": "https://developer.hashicorp.com/",
+      "notes": "Single root, suite = OS codename. amd64 only (no arch:all).",
+      "key": { "name": "hashicorp.gpg", "kind": "url", "url": "https://apt.releases.hashicorp.com/gpg" },
+      "entries": [
+        { "base_url": "https://apt.releases.hashicorp.com", "suites": ["bookworm", "trixie", "noble"], "components": ["main"], "arch": "amd64" }
+      ],
+      "clean": ["https://apt.releases.hashicorp.com"]
+    },
+    {
+      "id": "docker",
+      "label": "Docker CE",
+      "category": "Infrastructure",
+      "homepage": "https://docs.docker.com/engine/install/",
+      "notes": "Component 'stable' only (not edge/test/nightly). Same key for debian + ubuntu.",
+      "key": { "name": "docker.gpg", "kind": "url", "url": "https://download.docker.com/linux/debian/gpg" },
+      "entries": [
+        { "base_url": "https://download.docker.com/linux/debian", "suites": ["bookworm", "trixie"], "components": ["stable"], "arch": "amd64" },
+        { "base_url": "https://download.docker.com/linux/ubuntu", "suites": ["noble"], "components": ["stable"], "arch": "amd64" }
+      ],
+      "clean": ["https://download.docker.com/linux/debian", "https://download.docker.com/linux/ubuntu"]
+    },
+    {
+      "id": "tailscale",
+      "label": "Tailscale",
+      "category": "Infrastructure",
+      "homepage": "https://tailscale.com/",
+      "notes": "Mesh VPN. Release lists arch:all. Key is a binary keyring (.noarmor.gpg).",
+      "key": { "name": "tailscale.gpg", "kind": "url", "url": "https://pkgs.tailscale.com/stable/debian/bookworm.noarmor.gpg" },
+      "entries": [
+        { "base_url": "https://pkgs.tailscale.com/stable/debian", "suites": ["bookworm", "trixie"], "components": ["main"], "arch": "amd64,all" },
+        { "base_url": "https://pkgs.tailscale.com/stable/ubuntu", "suites": ["noble"], "components": ["main"], "arch": "amd64,all" }
+      ],
+      "clean": ["https://pkgs.tailscale.com/stable/debian", "https://pkgs.tailscale.com/stable/ubuntu"]
+    },
+    {
+      "id": "postgresql",
+      "label": "PostgreSQL (PGDG) — postgresql-17 etc.",
+      "category": "Databases",
+      "homepage": "https://www.postgresql.org/download/linux/",
+      "notes": "Suite <codename>-pgdg. postgresql-17 lives in the 'main' component (not the numbered '17').",
+      "key": { "name": "postgresql.gpg", "kind": "url", "url": "https://www.postgresql.org/media/keys/ACCC4CF8.asc" },
+      "entries": [
+        { "base_url": "https://apt.postgresql.org/pub/repos/apt", "suites": ["bookworm-pgdg", "trixie-pgdg", "noble-pgdg"], "components": ["main"], "arch": "amd64" }
+      ],
+      "clean": ["https://apt.postgresql.org/pub/repos/apt"]
+    },
+    {
+      "id": "nodesource-22",
+      "label": "Node.js 22 (NodeSource)",
+      "category": "Development",
+      "homepage": "https://github.com/nodesource/distributions",
+      "notes": "Node.js 22.x. Distro-agnostic suite 'nodistro'. Swap node_22.x for another major.",
+      "key": { "name": "nodesource.gpg", "kind": "url", "url": "https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key" },
+      "entries": [
+        { "base_url": "https://deb.nodesource.com/node_22.x", "suites": ["nodistro"], "components": ["main"], "arch": "amd64" }
+      ],
+      "clean": ["https://deb.nodesource.com/node_22.x"]
+    },
+    {
+      "id": "vscode",
+      "label": "Visual Studio Code (Microsoft)",
+      "category": "Development",
+      "homepage": "https://code.visualstudio.com/",
+      "notes": "Microsoft 'code' repo; Release lists arch:all.",
+      "key": { "name": "microsoft.gpg", "kind": "url", "url": "https://packages.microsoft.com/keys/microsoft.asc" },
+      "entries": [
+        { "base_url": "https://packages.microsoft.com/repos/code", "suites": ["stable"], "components": ["main"], "arch": "amd64,all" }
+      ],
+      "clean": ["https://packages.microsoft.com/repos/code"]
+    },
+    {
+      "id": "google-chrome",
+      "label": "Google Chrome",
+      "category": "Development",
+      "homepage": "https://www.google.com/chrome/",
+      "notes": "suite 'stable', component main.",
+      "key": { "name": "google-chrome.gpg", "kind": "url", "url": "https://dl.google.com/linux/linux_signing_key.pub" },
+      "entries": [
+        { "base_url": "https://dl.google.com/linux/chrome/deb", "suites": ["stable"], "components": ["main"], "arch": "amd64" }
+      ],
+      "clean": ["https://dl.google.com/linux/chrome/deb"]
+    },
+    {
+      "id": "nginx",
+      "label": "nginx (nginx.org official)",
+      "category": "Web",
+      "homepage": "https://nginx.org/en/linux_packages.html",
+      "notes": "Official nginx.org packages. Component is 'nginx'.",
+      "key": { "name": "nginx.gpg", "kind": "url", "url": "https://nginx.org/keys/nginx_signing.key" },
+      "entries": [
+        { "base_url": "https://nginx.org/packages/debian", "suites": ["bookworm", "trixie"], "components": ["nginx"], "arch": "amd64" }
+      ],
+      "clean": ["https://nginx.org/packages/debian"]
+    },
+    {
+      "id": "sury-php",
+      "label": "PHP (Sury / deb.sury.org)",
+      "category": "Web",
+      "homepage": "https://deb.sury.org/",
+      "notes": "Multi-version PHP for Debian.",
+      "key": { "name": "sury-php.gpg", "kind": "url", "url": "https://packages.sury.org/php/apt.gpg" },
+      "entries": [
+        { "base_url": "https://packages.sury.org/php", "suites": ["bookworm", "trixie"], "components": ["main"], "arch": "amd64" }
+      ],
+      "clean": ["https://packages.sury.org/php"]
+    },
+    {
+      "id": "openproject-17",
+      "label": "OpenProject 17 (Debian 12 only)",
+      "category": "Applications",
+      "homepage": "https://www.openproject.org/",
+      "notes": "packager.io. Numeric suite (12). Only Debian 12 is published upstream.",
+      "key": { "name": "openproject.gpg", "kind": "url", "url": "https://packages.openproject.com/srv/deb/opf/openproject/gpg-key.asc" },
+      "entries": [
+        { "base_url": "https://packages.openproject.com/srv/deb/opf/openproject/stable/17/debian", "suites": ["12"], "components": ["main"], "arch": "amd64" }
+      ],
+      "clean": ["https://packages.openproject.com/srv/deb/opf/openproject/stable/17/debian"]
+    }
+  ]
+}

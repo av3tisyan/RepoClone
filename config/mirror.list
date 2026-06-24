@@ -1,0 +1,57 @@
+############# apt-mirror configuration ################################
+# Deploy to: /etc/apt/mirror.list on the connected sync host (Debian 13).
+#
+# Policy (per deployment plan):
+#   - amd64 only (set defaultarch)
+#   - base_path /opt/apt
+#   - Target ~1.6–1.7 TB mirror data on a 2 TB disk (measure with: du -sh /opt/apt)
+#   - No Ubuntu -backports (add deb+clean if you need them)
+#   - Ubuntu: main + universe (no restricted — excludes NVIDIA drivers/intel-microcode/restricted
+#     firmware to save space; add restricted/multiverse deb lines if your fleet needs them)
+#
+# Verify Debian 13 suite names before first sync: https://www.debian.org/releases/
+# If `trixie` is not yet stable under deb.debian.org, comment those lines until GA.
+#
+# After first successful run, set nginx root to the apt-mirror tree under /opt/apt/mirror
+# and build client URIs from the on-disk paths (see docs/CLIENT_SOURCES.md).
+############# config ##################
+
+set base_path         /opt/apt
+set mirror_path       $base_path/mirror
+set skel_path         $base_path/skel
+set var_path          $base_path/var
+set postmirror_script $var_path/postmirror.sh
+set run_postmirror    1
+set nthreads          20
+set _tilde            0
+set defaultarch       amd64
+
+############# end config ##############
+
+# ----- Debian 12 (bookworm) -----
+deb http://deb.debian.org/debian bookworm main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian bookworm-updates main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security bookworm-security main contrib non-free non-free-firmware
+
+# ----- Debian 13 (replace suite names if upstream differs) -----
+deb http://deb.debian.org/debian trixie main contrib non-free non-free-firmware
+deb http://deb.debian.org/debian trixie-updates main contrib non-free non-free-firmware
+deb http://security.debian.org/debian-security trixie-security main contrib non-free non-free-firmware
+
+clean http://deb.debian.org/debian
+clean http://security.debian.org/debian-security
+
+# ----- Ubuntu 24.04 LTS (noble) -----
+deb http://archive.ubuntu.com/ubuntu noble main universe
+deb http://archive.ubuntu.com/ubuntu noble-updates main universe
+deb http://archive.ubuntu.com/ubuntu noble-security main universe
+
+clean http://archive.ubuntu.com/ubuntu
+
+# ----- Third-party repos (Zabbix, HashiCorp, OpenProject, PostgreSQL, Docker, Grafana, …) -----
+# Intentionally NOT seeded here. Best practice: first sync mirrors only the base OS above,
+# then add what you actually need — on demand — from the mirror-manager dashboard
+# (Catalog one-click, "Add by URL" auto-discovery, or a custom repo). The manager appends
+# them as delimited "# >>> mirror-manager: <name> >>>" blocks below this line and fetches
+# their keys. See docs/MIRROR_MANAGER.md. (Reference layouts: docs/ZABBIX_REPOS.md,
+# docs/POSTGRESQL_REPO.md, docs/OPENPROJECT_REPO.md.)
