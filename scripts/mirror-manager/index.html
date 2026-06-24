@@ -38,7 +38,7 @@
   .brand b{font-size:13px;font-weight:700;letter-spacing:-.01em;color:var(--fg)}
   .brand .sub{font-size:10px;color:var(--muted);letter-spacing:.02em}
   nav.side{padding:14px 8px;display:flex;flex-direction:column;gap:1px;overflow:auto;flex:1}
-  .nav-item{position:relative;display:flex;align-items:center;gap:9px;width:100%;padding:8px 10px;border:0;background:transparent;color:var(--fg2);border-radius:7px;cursor:pointer;font:inherit;font-size:13px;text-align:left;transition:background .12s,color .12s}
+  .nav-item{position:relative;display:flex;align-items:center;justify-content:flex-start;gap:9px;width:100%;height:auto;padding:8px 10px;border:0;background:transparent;box-shadow:none;color:var(--fg2);border-radius:7px;cursor:pointer;font:inherit;font-size:13px;text-align:left;transition:background .12s,color .12s}
   .nav-item:hover{background:var(--surface2);color:var(--fg)}
   .nav-item.active{background:var(--surface2);color:var(--accent);font-weight:500}
   .nav-item.active::before{content:"";position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:18px;background:var(--primary);border-radius:0 2px 2px 0}
@@ -103,7 +103,8 @@
   .dot.ok{background:var(--ok)} .dot.bad{background:var(--bad)} .dot.off{background:var(--muted)} .dot.unk{background:var(--line2)} .dot.warn{background:var(--warn)}
   .pill{font-size:11px;font-weight:500;padding:3px 11px;border-radius:99px;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;border:1px solid transparent}
   .pill.run{background:var(--warn-bg);color:#fbbf24;border-color:rgba(245,158,11,.3)} .pill.idle{background:var(--ok-bg);color:#34d399;border-color:rgba(16,185,129,.3)}
-  .pill .dot{margin:0}
+  .pill .dot{margin:0;width:7px;height:7px}
+  .pill.run .dot{animation:pulse 1.6s ease-in-out infinite}
 
   button{font:inherit;font-weight:600;font-size:13px;background:var(--primary);color:#fff;border:0;border-radius:var(--radius-sm);height:var(--ctl);padding:0 16px;display:inline-flex;align-items:center;justify-content:center;gap:6px;white-space:nowrap;cursor:pointer;transition:filter .12s,background .12s;box-shadow:0 1px 3px rgba(59,130,246,.35)}
   button:hover{filter:brightness(1.08)} button:active{filter:brightness(.95)}
@@ -191,7 +192,7 @@
 
   /* ---- topbar extras ---- */
   .tb-meta{font-size:11px;color:var(--muted);white-space:nowrap}
-  .icon-btn{background:transparent;border:1px solid var(--line2);color:var(--fg2);height:var(--ctl-sm);min-width:var(--ctl-sm);border-radius:var(--radius-sm);display:inline-grid;place-items:center;padding:0 8px;cursor:pointer;font-size:14px;line-height:1}
+  .icon-btn{background:transparent;border:1px solid var(--line2);color:var(--fg2);height:var(--ctl-sm);min-width:var(--ctl-sm);border-radius:var(--radius-sm);display:inline-grid;place-items:center;padding:0 8px;box-shadow:none;cursor:pointer;font-size:14px;line-height:1}
   .icon-btn:hover{background:var(--surface2);color:var(--fg);filter:none}
   .health{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
   .health b{color:var(--fg)}
@@ -662,7 +663,7 @@ async function refresh(){
   setBar("diskBar",d.used/d.total); setBar("budBar",d.used/d.budget);
 
   const pill=document.getElementById("syncPill");
-  pill.innerHTML='<span class="dot"></span>'+(s.sync.running?"syncing…":"idle");
+  pill.innerHTML='<span class="dot '+(s.sync.running?"warn":"ok")+'"></span>'+(s.sync.running?"syncing…":"idle");
   pill.className="pill "+(s.sync.running?"run":"idle");
   document.getElementById("syncBtn").disabled=s.sync.running;
   document.getElementById("quickSync").disabled=s.sync.running;
