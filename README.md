@@ -100,6 +100,41 @@ ssh -L 8080:127.0.0.1:8080 <sync-host>   # then open http://localhost:8080
 Add a repo (preset or custom-with-probe) and it writes the `deb`/`clean` lines, fetches the
 GPG key, and starts the sync — plus a live disk-usage gauge. See **`docs/MIRROR_MANAGER.md`**.
 
+## Repos you must add manually (flat repos, e.g. Kubernetes)
+
+The dashboard's **Add repository → Discover** and the **Catalog** handle standard repos with a
+`dists/<suite>/<component>` layout (Debian/Ubuntu, Docker, HashiCorp, Grafana, Launchpad PPAs, …).
+A few vendors publish **flat repos** — packages at the repo root, sourced with a trailing `/` and
+no `dists/` tree — most notably **Kubernetes** (`pkgs.k8s.io`, which is also split **per minor
+version**). `apt-mirror` is unreliable with flat repos, so add these **by hand**.
+
+**Kubernetes** (substitute your minor version, e.g. `v1.31`):
+
+1. Append to the managed `mirror.list` (`/opt/apt/manager/mirror.list`; manual lines outside the
+   `# >>> mirror-manager` blocks are preserved across dashboard edits):
+   ```
+   # Kubernetes v1.31 — FLAT repo (keep the trailing " /")
+   deb https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /
+   clean https://pkgs.k8s.io/core:/stable:/v1.31/deb/
+   ```
+2. Fetch the signing key (served to clients at `/keys/`):
+   ```bash
+   curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key \
+     | sudo gpg --dearmor -o /opt/apt/keys/kubernetes.gpg
+   sudo chmod 0644 /opt/apt/keys/kubernetes.gpg
+   ```
+3. Sync (`sudo systemctl start apt-mirror.service`, or dashboard **Sync now**), then confirm the
+   packages landed: `sudo find /opt/apt/mirror/pkgs.k8s.io -name '*.deb' | head`.
+4. Configure clients (they first install the key:
+   `sudo curl -fsSL https://apt.example.com/keys/kubernetes.gpg -o /etc/apt/keyrings/kubernetes.gpg`):
+   ```
+   deb [signed-by=/etc/apt/keyrings/kubernetes.gpg] https://apt.example.com/pkgs.k8s.io/core:/stable:/v1.31/deb/ /
+   ```
+
+> **If step 3 pulls `InRelease`/`Packages` but no `.deb`s**, `apt-mirror` didn't handle the flat
+> layout — mirror that repo with a flat-repo fetcher instead (a `curl`-based grab of the files
+> listed in `Packages`, in the style of `scripts/fetch-binary-all.sh`).
+
 ## Connected sync host (manual)
 
 1. Install: `sudo apt update && sudo apt install -y apt-mirror`
