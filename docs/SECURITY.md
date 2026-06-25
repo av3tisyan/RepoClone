@@ -53,16 +53,16 @@ now authenticates itself, so the proxy needs no auth layer — but keeping the p
 
 ## Recommended follow-ups (operator workflow changes — not yet automated)
 
-1. **Sign/checksum the client bootstrap.** `curl … /setup.sh | sudo sh` has no client-side
-   integrity check (first-touch RCE if the mirror/TLS is compromised). Publish `setup.sh.sha256`
-   (and ideally a detached GPG signature) and verify before piping; reserve `curl|sh` for
-   first contact, then manage clients via the now-trusted base channel.
+1. **Signed/checksummed client bootstrap — implemented.** Publishing writes `setup.sh.sha256`
+   (served at `/setup.sh.sha256`); the landing page shows a verify-before-run one-liner
+   (`curl … setup.sh.sha256 | sha256sum -c && sudo sh setup.sh`). A detached GPG signature
+   remains optional for higher assurance.
 2. **Full-hash airgap manifests.** `rsync-to-airgap.sh` defaults to `--quick` (size-only). For
    removable-media transfers use full **SHA-256** manifests and **GPG-sign the manifest** so
    tampering is detected before serving (apt's GPG still catches tampered `.deb`s as a backstop).
-3. **Pin third-party key fingerprints.** Keys are currently trusted because the TLS fetch
-   succeeded (TOFU). Verify each fetched key against a known-good fingerprint in
-   `populate-mirror-keys.sh` before publishing.
+3. **Third-party key fingerprint verification — implemented.** `populate-mirror-keys.sh`
+   prints each key's fingerprint for out-of-band verification and enforces optional
+   `EXPECT_<VENDOR>_FPR` pins (mismatch aborts). Set the pins for your vendors.
 4. **Enable the proxy admin-network ACL** (`allow/deny` in `mirror-manager.conf`) for your
    admin subnet, and prefer the SSH-tunnel access pattern for the dashboard.
 5. **Keep `--user root` out of production.** The whole least-privilege design depends on the

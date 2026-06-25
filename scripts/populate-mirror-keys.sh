@@ -133,4 +133,22 @@ echo "    SHA256SUMS:"
 sudo cat "$KEYS_DIR/SHA256SUMS" | sed 's/^/    /'
 
 echo
+echo "==> Key fingerprints — verify each against the vendor's PUBLISHED fingerprint."
+echo "    (To enforce, set e.g. EXPECT_POSTGRESQL_FPR=<fpr> before running; mismatch aborts.)"
+fp_fail=0
+for kf in debian-archive-keyring ubuntu-archive-keyring zabbix hashicorp openproject postgresql; do
+  f="$KEYS_DIR/$kf.gpg"
+  [ -f "$f" ] || continue
+  fpr="$(gpg --no-default-keyring --keyring "$f" --with-colons --fingerprint 2>/dev/null | awk -F: '/^fpr:/{print $10; exit}')"
+  echo "    $kf.gpg: ${fpr:-<unreadable>}"
+  var="EXPECT_$(printf '%s' "$kf" | tr 'a-z-' 'A-Z_')_FPR"
+  exp="$(eval "printf '%s' \"\${$var:-}\"")"
+  if [ -n "$exp" ] && [ "$exp" != "$fpr" ]; then
+    echo "    !! MISMATCH: $kf.gpg fingerprint $fpr != expected $exp" >&2
+    fp_fail=1
+  fi
+done
+[ "$fp_fail" -eq 0 ] || { echo "ERROR: key fingerprint verification failed — not trusting these keys." >&2; exit 1; }
+
+echo
 echo "Done. Files under $KEYS_DIR — sync to airgap and ensure nginx serves /keys/ (see deploy/nginx/)."

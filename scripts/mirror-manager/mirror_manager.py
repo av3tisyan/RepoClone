@@ -794,6 +794,8 @@ th{{color:#5b6776;font-size:12px;text-transform:uppercase;letter-spacing:.04em}}
 <h2>Quick setup</h2>
 <p>On a Debian/Ubuntu client, run:</p>
 <pre>curl -fsSL {_h(PUBLIC_URL)}/setup.sh | sudo sh</pre>
+<p class="muted">Or verify the script's checksum before running (recommended):</p>
+<pre>curl -fsSL {_h(PUBLIC_URL)}/setup.sh -o setup.sh &amp;&amp; curl -fsSL {_h(PUBLIC_URL)}/setup.sh.sha256 | sha256sum -c &amp;&amp; sudo sh setup.sh</pre>
 <p class="muted">Auto-detects the OS and configures APT to use this mirror. Or follow the per-OS steps below.</p>
 <h2>Available repositories</h2>
 <table><thead><tr><th>Repository</th><th>Suites</th><th>Upstream host(s)</th></tr></thead><tbody>{rows}</tbody></table>
@@ -875,9 +877,15 @@ def publish_landing():
     setup = os.path.join(WWW_DIR, "setup.sh")
     atomic_write(setup, sh)
     os.chmod(setup, 0o755)
+    digest = hashlib.sha256(sh.encode("utf-8")).hexdigest()
+    sumfile = os.path.join(WWW_DIR, "setup.sh.sha256")
+    atomic_write(sumfile, f"{digest}  setup.sh\n")
+    os.chmod(sumfile, 0o644)
     return {"path": idx, "setup_path": setup, "bytes": len(html), "setup_bytes": len(sh),
-            "url": PUBLIC_URL + "/", "setup_url": PUBLIC_URL + "/setup.sh",
-            "oneliner": f"curl -fsSL {PUBLIC_URL}/setup.sh | sudo sh"}
+            "sha256": digest, "url": PUBLIC_URL + "/", "setup_url": PUBLIC_URL + "/setup.sh",
+            "oneliner": f"curl -fsSL {PUBLIC_URL}/setup.sh | sudo sh",
+            "verified": (f"curl -fsSL {PUBLIC_URL}/setup.sh -o setup.sh && "
+                         f"curl -fsSL {PUBLIC_URL}/setup.sh.sha256 | sha256sum -c && sudo sh setup.sh")}
 
 
 def client_config(repo):
@@ -1314,11 +1322,12 @@ def ensure_admin():
     if list_users():
         return
     env_pw = os.environ.get("MM_ADMIN_PASS")
-    pw = env_pw or base64.urlsafe_b64encode(os.urandom(12)).decode().rstrip("=")
+    use_env = bool(env_pw and len(env_pw) >= 8)   # ignore a too-short env pw (avoid lockout)
+    pw = env_pw if use_env else base64.urlsafe_b64encode(os.urandom(12)).decode().rstrip("=")
     ok, _ = set_user("admin", pw)
     if not ok:
         return
-    if env_pw:
+    if use_env:
         print("mirror-manager: created initial admin 'admin' from MM_ADMIN_PASS.")
         return
     path = os.path.join(AUTH_DIR, "initial-admin-password")
