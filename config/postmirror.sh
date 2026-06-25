@@ -20,11 +20,4 @@ if [ -x /opt/apt/var/fetch-binary-all.sh ]; then
   /opt/apt/var/fetch-binary-all.sh
 fi
 
-# Mirror FLAT repos (no dists/ tree; e.g. Kubernetes pkgs.k8s.io) that apt-mirror can't handle.
-# Reads /opt/apt/manager/flat-repos.list ("<url> | <arches>" per line). After clean so the
-# .debs aren't swept. Non-fatal: a flat-repo failure must not fail the whole sync.
-if [ -x /opt/apt/var/mirror-flat-repo.sh ] && [ -f /opt/apt/manager/flat-repos.list ]; then
-  /opt/apt/var/mirror-flat-repo.sh || echo "WARN: mirror-flat-repo.sh reported errors" >&2
-fi
-
 exit 0

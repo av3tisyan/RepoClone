@@ -136,11 +136,10 @@ if [ "$ROLE" = "sync" ] || [ "$ROLE" = "both" ]; then
   echo "==> Installing /etc/apt/mirror.list"
   install -m0644 "$ROOT/config/mirror.list" /etc/apt/mirror.list
 
-  echo "==> Installing postmirror.sh, run-mirror-clean.sh, fetch-binary-all.sh, mirror-flat-repo.sh, guard + snapshot"
+  echo "==> Installing postmirror.sh, run-mirror-clean.sh, fetch-binary-all.sh, guard + snapshot"
   install -m0755 "$ROOT/config/postmirror.sh" /opt/apt/var/postmirror.sh
   install -m0755 "$ROOT/scripts/run-mirror-clean.sh" /opt/apt/var/run-mirror-clean.sh
   install -m0755 "$ROOT/scripts/fetch-binary-all.sh" /opt/apt/var/fetch-binary-all.sh
-  install -m0755 "$ROOT/scripts/mirror-flat-repo.sh" /opt/apt/var/mirror-flat-repo.sh
   install -m0755 "$ROOT/scripts/apt-mirror-guard.sh" /opt/apt/var/apt-mirror-guard.sh
   install -m0755 "$ROOT/scripts/mirror-snapshot.sh" /opt/apt/var/mirror-snapshot.sh
   # Disk-full guard floor (edit to taste). The guard aborts a sync below this many GB free.

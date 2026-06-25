@@ -30,7 +30,7 @@ install -m0644 "$ROOT/scripts/mirror-manager/index.html"        "$DEST/index.htm
 install -m0644 "$ROOT/scripts/mirror-manager/presets.json"      "$DEST/presets.json"
 
 echo "==> Installing /opt/apt/var helper scripts"
-for s in run-mirror-clean.sh fetch-binary-all.sh mirror-flat-repo.sh apt-mirror-guard.sh mirror-snapshot.sh airgap-manifest.sh mirror-backup.sh; do
+for s in run-mirror-clean.sh fetch-binary-all.sh apt-mirror-guard.sh mirror-snapshot.sh airgap-manifest.sh mirror-backup.sh; do
   [ -f "$ROOT/scripts/$s" ] && install -m0755 "$ROOT/scripts/$s" "/opt/apt/var/$s"
 done
 [ -f "$ROOT/config/postmirror.sh" ] && install -m0755 "$ROOT/config/postmirror.sh" /opt/apt/var/postmirror.sh

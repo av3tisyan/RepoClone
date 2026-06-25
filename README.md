@@ -100,47 +100,6 @@ ssh -L 8080:127.0.0.1:8080 <sync-host>   # then open http://localhost:8080
 Add a repo (preset or custom-with-probe) and it writes the `deb`/`clean` lines, fetches the
 GPG key, and starts the sync — plus a live disk-usage gauge. See **`docs/MIRROR_MANAGER.md`**.
 
-## Repos you must add manually (flat repos, e.g. Kubernetes)
-
-The dashboard's **Add repository → Discover** and the **Catalog** handle standard repos with a
-`dists/<suite>/<component>` layout (Debian/Ubuntu, Docker, HashiCorp, Grafana, Launchpad PPAs, …).
-A few vendors publish **flat repos** — packages at the repo root, sourced with a trailing `/` and
-no `dists/` tree — most notably **Kubernetes** (`pkgs.k8s.io`, also split **per minor version**).
-`apt-mirror` can't mirror flat repos reliably, so the kit ships a dedicated fetcher,
-**`scripts/mirror-flat-repo.sh`** (installed to `/opt/apt/var/`), which `postmirror.sh` runs on
-every sync. **Don't put flat repos in `mirror.list`** — list them in `flat-repos.list` instead.
-
-**Kubernetes** (substitute your minor version, e.g. `v1.31`):
-
-1. List the repo in `/opt/apt/manager/flat-repos.list` (copy `config/flat-repos.list.example`),
-   one `"<url> | <arches>"` per line:
-   ```
-   https://pkgs.k8s.io/core:/stable:/v1.31/deb/ | amd64 all
-   ```
-2. Publish the signing key (served to clients at `/keys/`):
-   ```bash
-   curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key \
-     | sudo gpg --dearmor -o /opt/apt/keys/kubernetes.gpg
-   sudo chmod 0644 /opt/apt/keys/kubernetes.gpg
-   ```
-3. Mirror it — automatic on the next sync (via `postmirror.sh`), or run it now:
-   ```bash
-   sudo /opt/apt/var/mirror-flat-repo.sh
-   # one-off, verifying the upstream signature first:
-   sudo KEYRING=/opt/apt/keys/kubernetes.gpg \
-     /opt/apt/var/mirror-flat-repo.sh https://pkgs.k8s.io/core:/stable:/v1.31/deb/ "amd64 all"
-   ```
-   It downloads + SHA256-verifies the `amd64`/`all` `.deb`s into `/opt/apt/mirror/pkgs.k8s.io/…`
-   (idempotent — re-runs fetch only what changed).
-4. Configure clients (install the key first:
-   `sudo curl -fsSL https://apt.example.com/keys/kubernetes.gpg -o /etc/apt/keyrings/kubernetes.gpg`):
-   ```
-   deb [signed-by=/etc/apt/keyrings/kubernetes.gpg] https://apt.example.com/pkgs.k8s.io/core:/stable:/v1.31/deb/ /
-   ```
-
-> The dashboard repo list and **Client sources** generator are `dists/`-only, so they won't show
-> or generate config for flat repos — use the client line above by hand.
-
 ## Connected sync host (manual)
 
 1. Install: `sudo apt update && sudo apt install -y apt-mirror`
