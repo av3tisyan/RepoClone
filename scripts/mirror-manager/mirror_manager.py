@@ -1225,7 +1225,7 @@ def ldap_proxy(path, payload=None, timeout=12):
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return json.loads(r.read().decode("utf-8") or "{}")
     except Exception as exc:
-        return {"ok": False, "error": f"auth backend unreachable: {exc}"}
+        return {"ok": False, "error": f"LDAP auth backend not reachable at {LDAP_AUTH_URL} — start mirror-manager-ldap-auth on this host (local users still work). ({exc})"}
 
 
 def auth_overview():

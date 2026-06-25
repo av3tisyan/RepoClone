@@ -3,7 +3,7 @@
 #
 #   cd ~/apt-mirror && git pull && sudo ./scripts/update-mirror-manager.sh
 #
-# Installs the dashboard app (mirror_manager.py, index.html, presets.json) and the
+# Installs the dashboard app (mirror_manager.py, index.html, presets.json, ldap_auth.py) and the
 # /opt/apt/var helper scripts, then RESTARTS mirror-manager so the new code loads.
 #
 # Deliberately does NOT touch: /etc/apt/mirror.list (the manager owns it — re-running
@@ -28,6 +28,7 @@ echo "==> Installing dashboard app -> $DEST"
 install -m0644 "$ROOT/scripts/mirror-manager/mirror_manager.py" "$DEST/mirror_manager.py"
 install -m0644 "$ROOT/scripts/mirror-manager/index.html"        "$DEST/index.html"
 install -m0644 "$ROOT/scripts/mirror-manager/presets.json"      "$DEST/presets.json"
+install -m0644 "$ROOT/scripts/mirror-manager/ldap_auth.py"      "$DEST/ldap_auth.py"
 
 echo "==> Installing /opt/apt/var helper scripts"
 for s in run-mirror-clean.sh fetch-binary-all.sh apt-mirror-guard.sh mirror-snapshot.sh airgap-manifest.sh mirror-backup.sh; do
@@ -43,6 +44,10 @@ NEW_PID="$(systemctl show -p MainPID --value mirror-manager 2>/dev/null || echo 
 RUNAS="$(ps -o user= -p "$NEW_PID" 2>/dev/null | tr -d ' ' || true)"
 echo "    PID ${OLD_PID} -> ${NEW_PID} (running as ${RUNAS:-?})"
 [ "$OLD_PID" = "$NEW_PID" ] && echo "    WARN: PID unchanged — restart may have failed; check: journalctl -u mirror-manager -n30" >&2
+# Reload the LDAP auth backend too, if it is installed and running on this host.
+if systemctl is-active --quiet mirror-manager-ldap-auth 2>/dev/null; then
+  systemctl restart mirror-manager-ldap-auth && echo "    restarted mirror-manager-ldap-auth"
+fi
 
 echo
 echo "Done. Now:"
