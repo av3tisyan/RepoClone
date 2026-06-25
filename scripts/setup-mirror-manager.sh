@@ -164,11 +164,14 @@ install -d -m0755 "$DROPIN"
     echo "Group=$MGR_USER"
     echo "SupplementaryGroups=systemd-journal"
     echo "ProtectSystem=strict"
-    echo "ReadWritePaths=/opt/apt"
+    echo "ReadWritePaths=/opt/apt/manager /opt/apt/keys /opt/apt/www"
+    echo "ReadOnlyPaths=/opt/apt/var"   # the daemon must never write the root-run scripts
+    echo "PrivateTmp=yes"
+    echo "ProtectHome=yes"
     echo "NoNewPrivileges=no"   # required so the narrow sudoers rule can escalate
   fi
 } > "$DROPIN/override.conf"
-chmod 0644 "$DROPIN/override.conf"
+chmod 0640 "$DROPIN/override.conf"   # may hold MM_TOKEN — not world-readable
 
 # Safety: a non-local bind with no allowlist and no token exposes a root API to the LAN.
 if [ "$LISTEN_HOST" != "127.0.0.1" ] && [ "$LISTEN_HOST" != "::1" ] && [ -z "$ALLOW" ] && [ -z "$TOKEN" ]; then

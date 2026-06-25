@@ -45,7 +45,9 @@ import json
 import os
 import re
 import shutil
+import socket
 import sqlite3
+import zlib
 import subprocess
 import tarfile
 import threading
@@ -105,6 +107,8 @@ for _c in re.split(r"[,\s]+", os.environ.get("MM_ALLOW", "").strip()):
 SIZES_CACHE = os.path.join(VAR_DIR, "mirror-manager-sizes.json")
 AUDIT_LOG = os.path.join(VAR_DIR, "mirror-manager-audit.jsonl")
 HTTP_TIMEOUT = 60
+MAX_FETCH_BYTES = 268_435_456      # 256 MiB cap on any single upstream fetch
+MAX_DECOMP_BYTES = 1_073_741_824   # 1 GiB cap on a decompressed index (gzip-bomb guard)
 
 # Privilege model: run privileged systemctl via sudo when not root, so the daemon can run
 # as a dedicated non-root user (see setup-mirror-manager.sh --user). As root, this is a no-op.
@@ -393,10 +397,45 @@ def remove_block(name):
     return True
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None   # never follow redirects (anti-SSRF)
+
+
+_FETCH_OPENER = urllib.request.build_opener(_NoRedirect)
+
+
+def _check_public_host(host, port):
+    """SSRF guard: refuse hosts that resolve to non-public addresses."""
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except OSError as exc:
+        raise ValueError(f"cannot resolve host: {exc}")
+    for _f, _t, _p, _c, sa in infos:
+        ip = ipaddress.ip_address(sa[0])
+        if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
+                or ip.is_multicast or ip.is_unspecified):
+            raise ValueError(f"refusing to fetch a non-public address ({ip})")
+
+
 def http_get(url):
+    p = urllib.parse.urlparse(url)
+    if p.scheme not in ("http", "https"):
+        raise ValueError("only http/https URLs are allowed")
+    if not p.hostname:
+        raise ValueError("missing host in URL")
+    _check_public_host(p.hostname, p.port or (443 if p.scheme == "https" else 80))
     req = urllib.request.Request(url, headers={"User-Agent": "mirror-manager"})
-    with urllib.request.urlopen(req, timeout=HTTP_TIMEOUT) as resp:
-        return resp.read()
+    with _FETCH_OPENER.open(req, timeout=HTTP_TIMEOUT) as resp:
+        return resp.read(MAX_FETCH_BYTES)
+
+
+def _bounded_gunzip(raw, limit):
+    d = zlib.decompressobj(16 + zlib.MAX_WBITS)
+    out = d.decompress(raw, limit)
+    if d.unconsumed_tail:
+        raise ValueError("decompressed index exceeds the size limit")
+    return out
 
 
 def _packages_bytes(base_url, suite, comp, arch):
@@ -406,9 +445,9 @@ def _packages_bytes(base_url, suite, comp, arch):
     except Exception:
         return None
     try:
-        return gzip.decompress(raw)
+        return _bounded_gunzip(raw, MAX_DECOMP_BYTES)
     except Exception:
-        return raw
+        return raw[:MAX_DECOMP_BYTES]
 
 
 def packages_count(base_url, suite, comp, arch):
@@ -1007,6 +1046,7 @@ def fetch_key(name, url):
     """Download a key and write a binary keyring to KEYS_DIR/<name> for apt Signed-By.
     Handles both ASCII-armored keys (.asc / BEGIN PGP …) and already-binary keyrings
     (e.g. Tailscale's *.noarmor.gpg) — dearmor only the armored ones."""
+    name = slug(name)
     os.makedirs(KEYS_DIR, exist_ok=True)
     raw = http_get(url)
     dest = os.path.join(KEYS_DIR, name)
@@ -1367,6 +1407,9 @@ def snapshots_info():
 
 
 def snapshot_create_bg(snap_id=""):
+    snap_id = (snap_id or "").strip()
+    if snap_id and not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", snap_id):
+        snap_id = ""   # reject traversal/odd ids; the script auto-generates a timestamp
     def worker():
         _snap_state["running"] = True
         try:
@@ -1469,6 +1512,14 @@ class Handler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("X-Frame-Options", "DENY")
+        self.send_header("Referrer-Policy", "no-referrer")
+        self.send_header("Content-Security-Policy",
+                         "default-src 'self'; script-src 'self' 'unsafe-inline'; "
+                         "style-src 'self' 'unsafe-inline'; img-src 'self' data:; "
+                         "font-src data:; connect-src 'self'; frame-ancestors 'none'; "
+                         "base-uri 'none'; form-action 'self'")
         self.end_headers()
         self.wfile.write(body)
 
@@ -1827,6 +1878,12 @@ class Handler(BaseHTTPRequestHandler):
             comps = c.get("components") or ["main"]
             if not base or not suites:
                 return self._send(400, {"error": "base_url and suite(s) required"})
+            if (not base.startswith(("http://", "https://"))) or any(ch in base for ch in '\n\r \t[]\\<>"\''):
+                return self._send(400, {"error": "base_url must be a plain http(s) URL with no spaces"})
+            _ALLOWED = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:+,/-"
+            for _v in (list(suites) + list(comps) + [c.get("arch", "amd64")]):
+                if _v and any(ch not in _ALLOWED for ch in _v):
+                    return self._send(400, {"error": "invalid characters in suite/components/arch"})
             entries = [{"base_url": base, "suites": suites, "components": comps,
                         "arch": c.get("arch", "amd64")}]
             cleans = [base]

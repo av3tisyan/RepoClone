@@ -16,6 +16,19 @@ ExecStart=/bin/sh -c 'if [ -x /opt/apt/var/apt-mirror-guard.sh ]; then exec /opt
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7
+# --- sandboxing: apt-mirror only needs outbound network + write under /opt/apt.
+#     If you change base_path away from /opt/apt, extend ReadWritePaths accordingly.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/opt/apt
+ProtectHome=yes
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictSUIDSGID=yes
+LockPersonality=yes
 # Large mirrors can run for many hours
 TimeoutStartSec=0
 StandardOutput=journal

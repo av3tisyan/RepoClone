@@ -167,3 +167,4 @@ The disk-full **guard** aborts a sync below `MIN_FREE_GB`, and the dashboard sho
 - `docs/SYSTEM_CLEANUP.md` — **`apt autoremove`**, old kernels, cache cleanup  
 - `docs/MIRROR_MANAGER.md` — **web dashboard**: add repos + auto-configure + sync + disk usage  
 - `docs/RESET.md` — remove configs / **`/opt/apt`**, redeploy from scratch  
+- `docs/SECURITY.md` — **security model**, hardening, and recommended follow-ups  
