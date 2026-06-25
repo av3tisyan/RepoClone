@@ -108,21 +108,39 @@ def check_local(user, password):
 
 
 # ---- LDAP ------------------------------------------------------------------- #
+def _err(exc):
+    """Readable text for a python-ldap error (its str() is often just 'option error')."""
+    a = getattr(exc, "args", None)
+    if a and isinstance(a[0], dict):
+        d = a[0]
+        return d.get("desc", "") + (": " + d["info"] if d.get("info") else "")
+    return f"{type(exc).__name__}: {exc}"
+
+
 def _new_conn(cfg):
     import ldap
-    conn = ldap.initialize(cfg["uri"])
+    uri = (cfg.get("uri") or "").strip()
+    if not uri:
+        raise ValueError("LDAP URI is empty — set it in the Access tab (e.g. ldaps://dc.example.com:636)")
+    conn = ldap.initialize(uri)
     conn.set_option(ldap.OPT_PROTOCOL_VERSION, 3)
     conn.set_option(ldap.OPT_REFERRALS, 0)
     conn.set_option(ldap.OPT_NETWORK_TIMEOUT, 8)
-    reqcert_name = cfg.get("reqcert", "demand")
-    if reqcert_name in ("never", "allow") and not ALLOW_INSECURE_TLS:
-        reqcert_name = "demand"   # refuse to disable LDAPS cert verification by default
-    reqcert = {"never": ldap.OPT_X_TLS_NEVER, "allow": ldap.OPT_X_TLS_ALLOW,
-               "demand": ldap.OPT_X_TLS_DEMAND}.get(reqcert_name, ldap.OPT_X_TLS_DEMAND)
-    conn.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, reqcert)
-    if cfg.get("ca"):
-        conn.set_option(ldap.OPT_X_TLS_CACERTFILE, cfg["ca"])
-    conn.set_option(ldap.OPT_X_TLS_NEWCTX, 0)  # must be last TLS option
+    # TLS options apply only to ldaps:// — setting them (esp. NEWCTX) on a plain
+    # ldap:// URI is what raises the opaque "option error".
+    if uri.lower().startswith("ldaps://"):
+        reqcert_name = cfg.get("reqcert", "demand")
+        if reqcert_name in ("never", "allow") and not ALLOW_INSECURE_TLS:
+            reqcert_name = "demand"   # refuse to disable LDAPS cert verification by default
+        reqcert = {"never": ldap.OPT_X_TLS_NEVER, "allow": ldap.OPT_X_TLS_ALLOW,
+                   "demand": ldap.OPT_X_TLS_DEMAND}.get(reqcert_name, ldap.OPT_X_TLS_DEMAND)
+        conn.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, reqcert)
+        ca = (cfg.get("ca") or "").strip()
+        if ca:
+            if not os.path.exists(ca):
+                raise ValueError(f"CA bundle not found: {ca}")
+            conn.set_option(ldap.OPT_X_TLS_CACERTFILE, ca)
+        conn.set_option(ldap.OPT_X_TLS_NEWCTX, 0)  # must be last TLS option
     return conn
 
 
@@ -179,9 +197,9 @@ def ldap_authenticate(cfg, user, password):
     except ldap.SERVER_DOWN:
         return False, "ldap server unreachable"
     except ldap.LDAPError as exc:
-        return False, f"ldap error: {exc}"
+        return False, f"ldap error: {_err(exc)}"
     except Exception as exc:
-        return False, f"error: {exc}"
+        return False, f"error: {_err(exc)}"
 
 
 def group_members(cfg):
@@ -204,7 +222,7 @@ def group_members(cfg):
                 members.append(m.decode("utf-8", "replace") if isinstance(m, bytes) else str(m))
         return {"ok": True, "members": sorted(members)}
     except Exception as exc:
-        return {"ok": False, "error": f"{exc}"}
+        return {"ok": False, "error": _err(exc)}
 
 
 def test_config(cfg, test_user="", test_pass=""):
@@ -222,7 +240,7 @@ def test_config(cfg, test_user="", test_pass=""):
         else:
             steps.append("connection: ok (direct mode — bind verified per user)")
     except Exception as exc:
-        return {"ok": False, "reason": f"connect/bind failed: {exc}", "steps": steps}
+        return {"ok": False, "reason": f"connect/bind failed: {_err(exc)}", "steps": steps}
     if test_user and test_pass:
         ok, reason = ldap_authenticate(cfg, test_user, test_pass)
         steps.append(f"test user {test_user!r}: {reason}")
