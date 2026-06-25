@@ -1345,14 +1345,15 @@ def login_page_html(error=""):
     err = '<p class="err">' + error + '</p>' if error else ''
     return ("""<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sign in — mirror-manager</title><style>
+<title>Sign in — RepoClone</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%2360a5fa'/><stop offset='1' stop-color='%231d4ed8'/></linearGradient></defs><path d='M31 10.5 L31 34 L10 22 Z' fill='url(%23g)'/><path d='M10 22 L31 34 L31 58 L10 46 Z' fill='url(%23g)'/><path d='M33 10.5 L54 22 L33 34 Z' fill='%2360a5fa' fill-opacity='.32'/><path d='M33 34 L54 22 L54 46 L33 58 Z' fill='%2360a5fa' fill-opacity='.32'/></svg>"><style>
 :root{--bg:#070b13;--card:#111b2e;--line:#1d2d45;--fg:#e2e8f0;--muted:#64748b;--pri:#3b82f6}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);
 color:var(--fg);font:14px/1.5 'Inter',ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px;width:340px;
 box-shadow:0 10px 34px rgba(0,0,0,.5)}.brand{display:flex;align-items:center;gap:10px;margin-bottom:18px}
 .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);
-box-shadow:0 0 0 1px rgba(59,130,246,.3),0 4px 12px rgba(59,130,246,.22)}
+display:grid;place-items:center;box-shadow:0 0 0 1px rgba(59,130,246,.3),0 4px 12px rgba(59,130,246,.22)}
 .brand b{font-size:14px;font-weight:700}.brand div{font-size:10px;color:var(--muted)}
 label{display:block;font-size:12px;color:var(--muted);margin:14px 0 5px}
 input{width:100%;background:#0c1322;color:var(--fg);border:1px solid #27395a;border-radius:7px;padding:10px 11px;font:inherit}
@@ -1360,7 +1361,7 @@ input:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px rgba(59,13
 button{width:100%;margin-top:18px;background:var(--pri);color:#fff;border:0;border-radius:7px;padding:10px;font:inherit;font-weight:600;cursor:pointer}
 .err{background:rgba(239,68,68,.13);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:7px;padding:8px 11px;font-size:13px;margin-top:14px}
 </style></head><body><form class="card" method="POST" action="login">
-<div class="brand"><span class="logo"></span><span><b>RepoClone</b><div>control plane</div></span></div>
+<div class="brand"><span class="logo"><svg width="20" height="20" viewBox="0 0 64 64" fill="none"><path d="M31 10.5 L31 34 L10 22 Z" fill="#fff"/><path d="M10 22 L31 34 L31 58 L10 46 Z" fill="#fff"/><path d="M33 10.5 L54 22 L33 34 Z" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/><path d="M33 34 L54 22 L54 46 L33 58 Z" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/></svg></span><span><b>RepoClone</b><div>control plane</div></span></div>
 <label for="u">Username</label><input id="u" name="username" autofocus autocomplete="username">
 <label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password">
 """ + err + """<button type="submit">Sign in</button></form></body></html>""")
