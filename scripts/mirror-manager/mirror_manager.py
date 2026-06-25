@@ -1569,10 +1569,15 @@ class Handler(BaseHTTPRequestHandler):
         ip = self.client_address[0]
         if login_throttled(ip):
             return self._login_page("Too many attempts — wait a few minutes and try again.")
-        # Reject cross-origin login POSTs (anti-CSRF / login fixation).
+        # Reject cross-origin login POSTs (anti-CSRF / login fixation). Compare host only
+        # (ignore port/scheme) and prefer X-Forwarded-Host so it works behind a reverse proxy.
         origin = self.headers.get("Origin", "")
-        if origin and urllib.parse.urlparse(origin).netloc != self.headers.get("Host", ""):
-            return self._login_page("Invalid request origin.")
+        if origin:
+            oh = (urllib.parse.urlparse(origin).hostname or "").lower()
+            host = (self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or "")
+            host = host.split(",")[0].split(":")[0].strip().lower()
+            if oh and host and oh != host:
+                return self._login_page("Invalid request origin.")
         n = int(self.headers.get("Content-Length", "0") or "0")
         raw = self.rfile.read(n).decode("utf-8", "replace") if n else ""
         form = urllib.parse.parse_qs(raw)
