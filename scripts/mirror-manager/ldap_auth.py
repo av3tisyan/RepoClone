@@ -156,10 +156,12 @@ def _resolve_user_dn(conn, cfg, user):
         conn.simple_bind_s(cfg.get("bind_dn", ""), cfg.get("bind_pw", ""))
         flt = cfg.get("user_filter", "(sAMAccountName={user})").format(
             user=escape_filter_chars(user))
-        res = conn.search_s(cfg.get("base_dn", ""), ldap.SCOPE_SUBTREE, flt, ["dn"])
-        if not res:
-            return None
-        return res[0][0]
+        # "1.1" = request no attributes (just DNs). Filter out AD referral
+        # continuations (entries whose DN is None) — rebinding to one raises
+        # "Protocol error".
+        res = conn.search_s(cfg.get("base_dn", ""), ldap.SCOPE_SUBTREE, flt, ["1.1"])
+        dns = [dn for dn, _attrs in res if dn]
+        return dns[0] if dns else None
     return cfg.get("user_dn_template", "{user}").format(user=escape_dn_chars(user))
 
 
