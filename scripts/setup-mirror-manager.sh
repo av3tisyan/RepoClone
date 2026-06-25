@@ -17,6 +17,8 @@
 #                    Empty = allow all. Strongly recommended whenever --listen-host != 127.0.0.1.
 #   --budget-tb N    Disk budget in TB for the dashboard gauge (default 1.7)
 #   --token STR      Shared secret; clients must pass ?token=STR (default: none)
+#   --admin-pass STR Initial break-glass 'admin' password for the nginx front door
+#                    (htpasswd/bcrypt; default: generated and printed once).
 #   --user NAME      Dedicated NON-ROOT user to run the daemon as (default: apt-manager).
 #                    Auto-created with all needed permissions: ownership of
 #                    /opt/apt/{keys,www,var} + the app, /etc/apt/mirror.list symlinked to
@@ -36,6 +38,7 @@ LISTEN_HOST=127.0.0.1
 ALLOW=""
 BUDGET_TB=1.7
 TOKEN=""
+ADMIN_PASS=""
 ENABLE=1
 MGR_USER=apt-manager      # default: run as a dedicated non-root user (best practice)
 MIRROR_LIST_PATH=/etc/apt/mirror.list
@@ -50,6 +53,7 @@ while [ $# -gt 0 ]; do
     --allow) ALLOW="$2"; shift 2 ;;
     --budget-tb) BUDGET_TB="$2"; shift 2 ;;
     --token) TOKEN="$2"; shift 2 ;;
+    --admin-pass) ADMIN_PASS="$2"; shift 2 ;;
     --user) MGR_USER="$2"; shift 2 ;;
     --no-enable) ENABLE=0; shift ;;
     -h|--help) usage 0 ;;
@@ -119,6 +123,27 @@ EOF
   fi
 fi
 
+# --- Local auth files: break-glass admin for the nginx front door (Access tab) ---
+AUTH_DIR=/opt/apt/manager
+install -d -m0755 "$AUTH_DIR"
+HTPW="$AUTH_DIR/htpasswd"
+if command -v htpasswd >/dev/null 2>&1; then
+  if [ ! -f "$HTPW" ]; then
+    if [ -z "$ADMIN_PASS" ]; then
+      ADMIN_PASS="$(head -c16 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | cut -c1-16)"
+      GENERATED=1
+    fi
+    printf '%s' "$ADMIN_PASS" | htpasswd -iBc "$HTPW" admin >/dev/null 2>&1 \
+      && echo "==> Created break-glass admin in $HTPW" \
+      || echo "WARN: could not create $HTPW" >&2
+    [ -n "${GENERATED:-}" ] && echo "    admin password (SAVE THIS - shown once): $ADMIN_PASS"
+  fi
+  if [ -n "$MGR_USER" ] && [ "$MGR_USER" != "root" ]; then chown "$MGR_USER":"$MGR_USER" "$HTPW" 2>/dev/null || true; fi
+  chmod 0600 "$HTPW" 2>/dev/null || true
+else
+  echo "WARN: htpasswd not found - local user management needs 'apt install apache2-utils'." >&2
+fi
+
 echo "==> Installing systemd unit"
 UNIT=/etc/systemd/system/mirror-manager.service
 install -m0644 "$ROOT/deploy/systemd/mirror-manager.service" "$UNIT"
@@ -132,6 +157,7 @@ install -d -m0755 "$DROPIN"
   echo "Environment=MM_LISTEN_PORT=$PORT"
   echo "Environment=MM_BUDGET_BYTES=$BUDGET_BYTES"
   echo "Environment=MM_MIRROR_LIST=$MIRROR_LIST_PATH"
+  echo "Environment=MM_AUTH_DIR=$AUTH_DIR"
   [ -n "$MM_STATE" ] && echo "Environment=MM_VAR_DIR=$MM_STATE"
   [ -n "$ALLOW" ] && echo "Environment=MM_ALLOW=$ALLOW"
   [ -n "$TOKEN" ] && echo "Environment=MM_TOKEN=$TOKEN"
@@ -181,6 +207,7 @@ if [ "$ENABLE" -eq 1 ]; then
   fi
   [ -n "$TOKEN" ] && echo "Token required: append ?token=$TOKEN to the URL"
   echo "Front with TLS+auth at apt-manager.example.com: see deploy/nginx/mirror-manager.conf"
+  echo "Manage local users + LDAP/LDAPS in the dashboard Access tab (auth enforced by that proxy + ldap_auth.py)."
 else
   echo "==> Installed (not enabled). Start with: systemctl enable --now mirror-manager.service"
 fi

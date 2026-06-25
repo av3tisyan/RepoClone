@@ -71,6 +71,13 @@ TOKEN = os.environ.get("MM_TOKEN", "")
 MIN_FREE_GB = int(os.environ.get("MM_MIN_FREE_GB", "50"))
 SNAPSHOT_SH = os.environ.get("MM_SNAPSHOT_SH", "/opt/apt/var/mirror-snapshot.sh")
 SNAP_DIR = os.environ.get("MM_SNAP_DIR", "/opt/apt/snapshots")
+# Auth/user management (read by ldap_auth.py; written here as the apt-manager user)
+AUTH_DIR = os.environ.get("MM_AUTH_DIR", "/opt/apt/manager")
+LDAP_CONF = os.environ.get("MM_LDAP_CONF", os.path.join(AUTH_DIR, "ldap.json"))
+HTPASSWD = os.environ.get("MM_HTPASSWD", os.path.join(AUTH_DIR, "htpasswd"))
+LDAP_AUTH_URL = os.environ.get("MM_LDAP_AUTH_URL", "http://127.0.0.1:8889").rstrip("/")
+BREAKGLASS_USER = os.environ.get("MM_BREAKGLASS_USER", "admin")
+INSECURE_LDAP_OK = os.environ.get("MM_ALLOW_INSECURE_LDAP") == "1"
 
 # Marker that "disables" a managed deb/clean line (apt-mirror ignores the comment).
 OFF = "#MMOFF# "
@@ -1111,6 +1118,126 @@ def run(cmd, timeout=30, env=None):
         return R()
 
 
+
+# ---- auth / user management (config consumed by ldap_auth.py) ---------------- #
+LDAP_FIELDS = ("uri", "ca", "reqcert", "bind_mode", "user_dn_template",
+               "bind_dn", "base_dn", "user_filter", "required_group")
+USER_RE = re.compile(r"^[A-Za-z0-9._@-]{1,64}$")
+
+
+def load_ldap_conf():
+    try:
+        with open(LDAP_CONF) as fh:
+            return json.load(fh)
+    except Exception:
+        return {}
+
+
+def ldap_conf_public():
+    """LDAP config for the UI — never returns the bind password itself."""
+    c = load_ldap_conf()
+    out = {k: c.get(k, "") for k in LDAP_FIELDS}
+    out["enabled"] = bool(c.get("enabled", False))
+    out["bind_pw_set"] = bool(c.get("bind_pw"))
+    return out
+
+
+def save_ldap_conf(body):
+    c = load_ldap_conf()
+    for k in LDAP_FIELDS:
+        if k in body:
+            c[k] = ("" if body[k] is None else str(body[k]))
+    # never persist an insecure TLS mode unless the operator explicitly opted in
+    rc = str(c.get("reqcert") or "demand")
+    if rc != "demand" and not INSECURE_LDAP_OK:
+        rc = "demand"
+    c["reqcert"] = rc
+    c["enabled"] = bool(body.get("enabled", c.get("enabled", False)))
+    if body.get("bind_pw"):                 # only replace when a new one is supplied
+        c["bind_pw"] = str(body["bind_pw"])
+    if body.get("clear_bind_pw"):
+        c.pop("bind_pw", None)
+    os.makedirs(AUTH_DIR, mode=0o700, exist_ok=True)
+    tmp = LDAP_CONF + ".tmp"
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # 0600 from creation
+    with os.fdopen(fd, "w") as fh:
+        json.dump(c, fh, indent=2)
+    os.replace(tmp, LDAP_CONF)
+    return ldap_conf_public()
+
+
+def htpasswd_users():
+    users = []
+    try:
+        with open(HTPASSWD) as fh:
+            for line in fh:
+                line = line.strip()
+                if line and ":" in line and not line.startswith("#"):
+                    users.append(line.split(":", 1)[0])
+    except OSError:
+        pass
+    return sorted(set(users))
+
+
+def htpasswd_set(user, password):
+    if not USER_RE.match(user or ""):
+        return False, "invalid username (allowed: letters, digits, . _ @ -)"
+    if not password or len(password) < 8:
+        return False, "password must be at least 8 characters"
+    if shutil.which("htpasswd") is None:
+        return False, "htpasswd not found — install apache2-utils on the sync host"
+    os.makedirs(AUTH_DIR, mode=0o700, exist_ok=True)
+    create = ["-c"] if not os.path.exists(HTPASSWD) else []
+    try:  # -i reads the password from stdin so it never appears on the process argv
+        r = subprocess.run(["htpasswd", "-iB"] + create + [HTPASSWD, user],
+                           input=password.encode("utf-8"), capture_output=True, timeout=15)
+    except Exception as exc:
+        return False, f"htpasswd error: {exc}"
+    if r.returncode != 0:
+        return False, (r.stderr.decode("utf-8", "replace") or "htpasswd failed").strip()
+    try:
+        os.chmod(HTPASSWD, 0o600)
+    except OSError:
+        pass
+    return True, "ok"
+
+
+def htpasswd_delete(user):
+    if user == BREAKGLASS_USER:
+        return False, f"cannot delete the break-glass admin ({BREAKGLASS_USER})"
+    if user not in htpasswd_users():
+        return False, "no such local user"
+    if shutil.which("htpasswd") is None:
+        return False, "htpasswd not found — install apache2-utils"
+    r = run(["htpasswd", "-D", HTPASSWD, user], timeout=15)
+    return (r.returncode == 0), ((r.stderr or "ok").strip())
+
+
+def ldap_proxy(path, payload=None, timeout=12):
+    """Delegate LDAP bind/test/group-listing to ldap_auth.py — the daemon is
+    stdlib-only and has no LDAP client."""
+    data = json.dumps(payload).encode("utf-8") if payload is not None else None
+    req = urllib.request.Request(
+        LDAP_AUTH_URL + path, data=data,
+        method=("POST" if data is not None else "GET"),
+        headers={"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read().decode("utf-8") or "{}")
+    except Exception as exc:
+        return {"ok": False, "error": f"auth backend unreachable: {exc}"}
+
+
+def auth_overview():
+    return {
+        "htpasswd_users": htpasswd_users(),
+        "htpasswd_available": shutil.which("htpasswd") is not None,
+        "breakglass": BREAKGLASS_USER,
+        "ldap": ldap_conf_public(),
+        "auth_backend": LDAP_AUTH_URL,
+    }
+
+
 def sync_state():
     r = run(["systemctl", "show", APT_UNIT, "-p", "ActiveState", "-p", "SubState",
              "-p", "ExecMainStatus", "-p", "InactiveEnterTimestamp"])
@@ -1333,6 +1460,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, estimate_all())
         if path == "/api/backup":
             return self._backup()
+        if path == "/api/auth":
+            return self._send(200, auth_overview())
+        if path == "/api/auth/group":
+            return self._send(200, ldap_proxy("/group"))
         return self._send(404, {"error": "not found"})
 
     def _backup(self):
@@ -1414,6 +1545,25 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"ok": True, **res})
             except Exception as exc:
                 return self._send(500, {"error": f"publish failed: {exc}"})
+        if path == "/api/auth/ldap":
+            cfg = save_ldap_conf(self._json_body())
+            self._audit("auth-ldap", "enabled" if cfg.get("enabled") else "disabled")
+            return self._send(200, {"ok": True, "ldap": cfg})
+        if path == "/api/auth/ldap/test":
+            return self._send(200, ldap_proxy("/test", self._json_body()))
+        if path == "/api/auth/users":
+            b = self._json_body()
+            action = (b.get("action") or "set").strip()
+            user = (b.get("username") or "").strip()
+            if action == "delete":
+                ok, msg = htpasswd_delete(user)
+                if ok:
+                    self._audit("user-delete", user)
+                return self._send(200 if ok else 400, {"ok": ok, "message": msg})
+            ok, msg = htpasswd_set(user, b.get("password") or "")
+            if ok:
+                self._audit("user-set", user)
+            return self._send(200 if ok else 400, {"ok": ok, "message": msg})
         return self._send(404, {"error": "not found"})
 
     def do_DELETE(self):

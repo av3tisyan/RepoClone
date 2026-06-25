@@ -6,9 +6,13 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-# Runs on the reverse-proxy host (where apt-manager.example.com nginx lives).
-# No special privileges needed — it only talks to LDAPS and answers localhost.
-DynamicUser=yes
+# Runs as the dashboard's apt-manager user and CO-LOCATED with the dashboard, so it can
+# read the UI-managed auth files (/opt/apt/manager/{ldap.json,htpasswd}) and verify local
+# users with `htpasswd -vb`. It still only talks to LDAPS + answers localhost.
+# (Separate-host proxy without the dashboard? Use DynamicUser=yes and configure LDAP purely
+# via the Environment= lines below — but then the Access tab can't manage it.)
+User=apt-manager
+Group=apt-manager
 WorkingDirectory=/opt/apt/mirror-manager
 ExecStart=/usr/bin/python3 /opt/apt/mirror-manager/ldap_auth.py
 Restart=on-failure
@@ -16,7 +20,10 @@ RestartSec=3
 
 Environment=LA_LISTEN_HOST=127.0.0.1
 Environment=LA_LISTEN_PORT=8889
-# ---- set these for your directory ----
+# UI-managed auth files (written by the dashboard; take precedence over the env below).
+Environment=LDAP_CONF=/opt/apt/manager/ldap.json
+Environment=HTPASSWD=/opt/apt/manager/htpasswd
+# ---- fallback directory config (used only when ldap.json is absent) ----
 Environment=LDAP_URI=ldaps://dc.example.com:636
 Environment=LDAP_BIND_MODE=direct
 Environment=LDAP_USER_DN_TEMPLATE={user}@example.com

@@ -29,7 +29,7 @@ air-gapped/offline sync host without `pip`.
 
 The dashboard is an enterprise-style single-page app shell: a left sidebar nav switches
 between **Overview** (KPI cards + storage), **Repositories**, **Catalog**, **Add repository**,
-**Sync**, **Client sources**, and **Server** views (deep-linkable via `#hash`). It ships as
+**Sync**, **Client sources**, **Server**, and **Access** (users + LDAP) views (deep-linkable via `#hash`). It ships as
 one self-contained `index.html` (no build step, no external assets — airgap-safe) and is
 accessible: keyboard/focus-visible, `Escape`-to-close and focus-restoring modals, `aria-live`
 toasts/status, a connection-lost banner, and reduced-motion support.
@@ -231,12 +231,37 @@ never touched — so the manager and your existing `config/mirror.list` coexist.
 preset that you already maintain by hand would create a managed duplicate; remove the manual
 lines first if you want the manager to own it.)
 
+## Users & access (Access tab)
+
+The **Access** view (sidebar → Operations → Access) manages the front-door auth the nginx
+proxy enforces — no hand-editing of env vars or password files:
+
+- **Local users** — add / reset / delete accounts in an `htpasswd` file
+  (`/opt/apt/manager/htpasswd`; bcrypt, needs `apt install apache2-utils`). The **`admin`**
+  account is **break-glass**: it always works even if the directory is down, and can't be
+  deleted from the UI. The installer creates it and prints a generated password once
+  (override with `setup-mirror-manager.sh --admin-pass`).
+- **LDAP / LDAPS** — edit the directory connection (URI, CA, TLS verify, direct/search bind,
+  required group), **Test connection** (optionally against a real user), then **Save**.
+  Stored in `/opt/apt/manager/ldap.json`.
+- **Required group members** — read-only list of who is in the required group (membership is
+  managed in your directory, not here).
+
+Both files are written by the dashboard (as `apt-manager`) and read by `ldap_auth.py`, which
+checks **local users first, then LDAP** — so the break-glass `admin` works even when the
+directory is unreachable. This requires the auth backend to run on the **same host** as the
+dashboard (so it can read `/opt/apt/manager`); a separate-host proxy falls back to env-var
+LDAP config and isn't UI-managed.
+
+> **Lockout safety:** keep the `admin` password. If an LDAP change is wrong, log in as
+> `admin` (always checked locally) and fix it — and use *Test connection* before *Save*.
+
 ## LDAPS authentication (nginx)
 
-nginx has no native LDAP auth, so the proxy validates HTTP Basic credentials against your
-directory over **LDAPS** using nginx `auth_request` + a small backend
-(`scripts/mirror-manager/ldap_auth.py`). The user still gets the normal browser Basic-auth
-prompt; the password is checked against AD/LDAP instead of an htpasswd file.
+nginx has no native LDAP auth, so the proxy validates HTTP Basic credentials with a small
+backend (`scripts/mirror-manager/ldap_auth.py`) via `auth_request`. That backend checks the
+local `htpasswd` first, then your directory over **LDAPS**. The user still gets the normal
+browser Basic-auth prompt; the password is checked against the htpasswd file or AD/LDAP.
 
 On the **reverse-proxy host**:
 
@@ -265,8 +290,9 @@ Always use an `ldaps://…:636` `LDAP_URI`; set `LDAP_CA` to verify the server c
 (`LDAP_TLS_REQCERT=demand`). Restrict who may log in with
 `LDAP_REQUIRED_GROUP=CN=apt-admins,OU=Groups,DC=example,DC=com` (AD nested groups
 supported). Successful auths are cached `LA_CACHE_TTL` seconds; denials log the username
-and reason only — never the password. A static htpasswd still works if you prefer: drop the
-`auth_request`/`@ldap_challenge` lines and use `auth_basic` + `auth_basic_user_file`.
+and reason only — never the password. These `LDAP_*` env values are **fallback defaults**:
+once you save settings in the **Access** tab they live in `/opt/apt/manager/ldap.json` and
+take precedence, and local users in the htpasswd are always accepted regardless of LDAP.
 
 ## Security model
 
