@@ -105,35 +105,41 @@ GPG key, and starts the sync — plus a live disk-usage gauge. See **`docs/MIRRO
 The dashboard's **Add repository → Discover** and the **Catalog** handle standard repos with a
 `dists/<suite>/<component>` layout (Debian/Ubuntu, Docker, HashiCorp, Grafana, Launchpad PPAs, …).
 A few vendors publish **flat repos** — packages at the repo root, sourced with a trailing `/` and
-no `dists/` tree — most notably **Kubernetes** (`pkgs.k8s.io`, which is also split **per minor
-version**). `apt-mirror` is unreliable with flat repos, so add these **by hand**.
+no `dists/` tree — most notably **Kubernetes** (`pkgs.k8s.io`, also split **per minor version**).
+`apt-mirror` can't mirror flat repos reliably, so the kit ships a dedicated fetcher,
+**`scripts/mirror-flat-repo.sh`** (installed to `/opt/apt/var/`), which `postmirror.sh` runs on
+every sync. **Don't put flat repos in `mirror.list`** — list them in `flat-repos.list` instead.
 
 **Kubernetes** (substitute your minor version, e.g. `v1.31`):
 
-1. Append to the managed `mirror.list` (`/opt/apt/manager/mirror.list`; manual lines outside the
-   `# >>> mirror-manager` blocks are preserved across dashboard edits):
+1. List the repo in `/opt/apt/manager/flat-repos.list` (copy `config/flat-repos.list.example`),
+   one `"<url> | <arches>"` per line:
    ```
-   # Kubernetes v1.31 — FLAT repo (keep the trailing " /")
-   deb https://pkgs.k8s.io/core:/stable:/v1.31/deb/ /
-   clean https://pkgs.k8s.io/core:/stable:/v1.31/deb/
+   https://pkgs.k8s.io/core:/stable:/v1.31/deb/ | amd64 all
    ```
-2. Fetch the signing key (served to clients at `/keys/`):
+2. Publish the signing key (served to clients at `/keys/`):
    ```bash
    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.31/deb/Release.key \
      | sudo gpg --dearmor -o /opt/apt/keys/kubernetes.gpg
    sudo chmod 0644 /opt/apt/keys/kubernetes.gpg
    ```
-3. Sync (`sudo systemctl start apt-mirror.service`, or dashboard **Sync now**), then confirm the
-   packages landed: `sudo find /opt/apt/mirror/pkgs.k8s.io -name '*.deb' | head`.
-4. Configure clients (they first install the key:
+3. Mirror it — automatic on the next sync (via `postmirror.sh`), or run it now:
+   ```bash
+   sudo /opt/apt/var/mirror-flat-repo.sh
+   # one-off, verifying the upstream signature first:
+   sudo KEYRING=/opt/apt/keys/kubernetes.gpg \
+     /opt/apt/var/mirror-flat-repo.sh https://pkgs.k8s.io/core:/stable:/v1.31/deb/ "amd64 all"
+   ```
+   It downloads + SHA256-verifies the `amd64`/`all` `.deb`s into `/opt/apt/mirror/pkgs.k8s.io/…`
+   (idempotent — re-runs fetch only what changed).
+4. Configure clients (install the key first:
    `sudo curl -fsSL https://apt.example.com/keys/kubernetes.gpg -o /etc/apt/keyrings/kubernetes.gpg`):
    ```
    deb [signed-by=/etc/apt/keyrings/kubernetes.gpg] https://apt.example.com/pkgs.k8s.io/core:/stable:/v1.31/deb/ /
    ```
 
-> **If step 3 pulls `InRelease`/`Packages` but no `.deb`s**, `apt-mirror` didn't handle the flat
-> layout — mirror that repo with a flat-repo fetcher instead (a `curl`-based grab of the files
-> listed in `Packages`, in the style of `scripts/fetch-binary-all.sh`).
+> The dashboard repo list and **Client sources** generator are `dists/`-only, so they won't show
+> or generate config for flat repos — use the client line above by hand.
 
 ## Connected sync host (manual)
 
