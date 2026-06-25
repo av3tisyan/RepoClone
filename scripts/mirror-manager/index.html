@@ -273,9 +273,11 @@
       <span class="health" id="tbHealth"></span>
       <span class="spacer"></span>
       <span class="tb-meta" id="tbUpdated"></span>
+      <span class="tb-meta" id="whoami"></span>
       <span id="syncPill" class="pill idle"><span class="dot"></span>idle</span>
       <button class="icon-btn" id="themeBtn" title="Toggle light / dark" aria-label="Toggle light/dark theme">◐</button>
       <button class="icon-btn" id="settingsBtn" title="Settings" aria-label="Open settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+      <a id="logoutLink" href="logout" class="icon-btn" title="Sign out" aria-label="Sign out"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></a>
       <span class="tb-div"></span>
       <button class="sm" id="quickSync">Sync now</button>
     </header>
@@ -488,8 +490,8 @@
       <!-- ACCESS -->
       <section id="view-access" class="view" aria-label="Access">
         <div class="panel">
-          <h2>Local users <span class="muted" style="text-transform:none;font-weight:400;letter-spacing:0">· nginx Basic auth (htpasswd, bcrypt)</span></h2>
-          <div class="stat">Local accounts for the front-door proxy. <b>admin</b> is the <b>break-glass</b> account &mdash; it always works even if the directory is unreachable, and can't be deleted here.</div>
+          <h2>Users <span class="muted" style="text-transform:none;font-weight:400;letter-spacing:0">· dashboard login accounts (SQLite · PBKDF2)</span></h2>
+          <div class="stat">Accounts that can sign in to this dashboard. Passwords are hashed with PBKDF2 in a local SQLite database. You can't delete the account you're signed in as, or the last remaining user.</div>
           <table><thead><tr><th>User</th><th class="r">Actions</th></tr></thead><tbody id="userRows"><tr><td><span class="skel" style="width:40%"></span></td><td></td></tr></tbody></table>
           <div class="row" style="margin-top:14px">
             <div><label for="nuUser">New / update user</label><input id="nuUser" placeholder="username" autocomplete="off"></div>
@@ -497,37 +499,6 @@
             <div style="flex:0;white-space:nowrap"><button id="userAdd">Add / update</button></div>
           </div>
           <div class="msg" id="userMsg" role="status"></div>
-        </div>
-        <div class="panel">
-          <h2>LDAP / LDAPS directory <span class="right">
-            <button class="ghost sm" id="ldapTest">Test connection</button>
-            <button class="sm" id="ldapSave">Save</button>
-          </span></h2>
-          <div class="row" style="margin-bottom:4px"><div style="flex:0;white-space:nowrap"><label style="margin:0;color:var(--fg)"><input type="checkbox" id="lEnabled" style="width:auto;vertical-align:middle"> LDAP authentication enabled</label></div></div>
-          <div class="row">
-            <div style="flex:2"><label for="lUri">Server URI (use <code>ldaps://</code>)</label><input id="lUri" placeholder="ldaps://dc.example.com:636"></div>
-            <div style="flex:2"><label for="lCa">CA bundle (optional)</label><input id="lCa" placeholder="/etc/ssl/certs/ca.pem"></div>
-            <div style="flex:0;min-width:120px"><label for="lReqcert">TLS verify</label><select id="lReqcert"><option>demand</option><option>allow</option><option>never</option></select></div>
-          </div>
-          <div class="row">
-            <div style="flex:0;min-width:140px"><label for="lMode">Bind mode</label><select id="lMode"><option value="direct">direct</option><option value="search">search</option></select></div>
-            <div style="flex:3"><label for="lTpl">User DN template (direct)</label><input id="lTpl" placeholder="{user}@example.com"></div>
-          </div>
-          <div id="lSearch" style="display:none">
-            <div class="row"><div style="flex:2"><label for="lBindDn">Bind DN (service account)</label><input id="lBindDn" placeholder="CN=svc,OU=Service,DC=example,DC=com"></div><div><label for="lBindPw">Bind password</label><input id="lBindPw" type="password" autocomplete="new-password"></div></div>
-            <div class="row"><div style="flex:2"><label for="lBaseDn">Base DN</label><input id="lBaseDn" placeholder="DC=example,DC=com"></div><div style="flex:2"><label for="lFilter">User filter</label><input id="lFilter" placeholder="(sAMAccountName={user})"></div></div>
-          </div>
-          <label for="lGroup">Required group DN (optional &mdash; empty = any authenticated user)</label>
-          <input id="lGroup" placeholder="CN=apt-admins,OU=Groups,DC=example,DC=com">
-          <label style="margin-top:14px">Test with a directory user (optional)</label>
-          <div class="row"><div><input id="lTestUser" placeholder="test username" autocomplete="off"></div><div><input id="lTestPass" type="password" placeholder="test password" autocomplete="new-password"></div></div>
-          <div class="probe" id="ldapOut"></div>
-          <div class="msg" id="ldapMsg" role="status"></div>
-        </div>
-        <div class="panel">
-          <h2>Required group members <span class="right"><button class="ghost sm" id="grpLoad">Refresh</button></span></h2>
-          <div class="stat">Read-only &mdash; who is in the required group. Membership is managed in your directory, not here.</div>
-          <div id="grpOut" class="src"><div class="empty">click Refresh</div></div>
         </div>
       </section>
     </main>
@@ -588,10 +559,7 @@ function demoApi(path){
   if(path==="status")return Promise.resolve({disk,sync:{running:false,sub_state:"dead",last_exit:"0",finished:"Thu 2026-06-25 02:14:07"},
     timer:{enabled:true,next:"Fri 2026-06-26 02:00:00",last:""},sizes_updated:now-1800,sizes_computing:false,
     repos_total:total,public_url:"https://apt.example.com",min_free_gb:50,low_disk:false,managed,manual,mirror_list:"/opt/apt/manager/mirror.list"});
-  if(path==="auth")return Promise.resolve({htpasswd_users:["admin","jdoe"],htpasswd_available:true,breakglass:"admin",auth_backend:"http://127.0.0.1:8889",ldap:{enabled:true,uri:"ldaps://dc.example.com:636",ca:"/etc/ssl/certs/example-root-ca.pem",reqcert:"demand",bind_mode:"direct",user_dn_template:"{user}@example.com",bind_dn:"",base_dn:"",user_filter:"(sAMAccountName={user})",required_group:"CN=apt-admins,OU=Groups,DC=example,DC=com",bind_pw_set:false}});
-  if(path.startsWith("auth/group"))return Promise.resolve({ok:true,members:["CN=John Doe,OU=IT,DC=example,DC=com","CN=Anna Smith,OU=IT,DC=example,DC=com","CN=apt-svc,OU=Service Accounts,DC=example,DC=com"]});
-  if(path.startsWith("auth/ldap/test"))return Promise.resolve({ok:true,reason:"connection ok",steps:["service bind: ok","test user 'jdoe': ok"]});
-  if(path.startsWith("auth/ldap"))return Promise.resolve({ok:true,ldap:{enabled:true}});
+  if(path==="auth")return Promise.resolve({users:["admin","jdoe"],current:"admin"});
   if(path.startsWith("auth/users"))return Promise.resolve({ok:true,message:"ok"});
   if(path==="presets")return Promise.resolve({presets:[
     {id:"docker",label:"Docker CE",category:"Infrastructure",notes:"Component 'stable' only.",homepage:"#"},
@@ -686,51 +654,26 @@ function openSettings(){
 document.getElementById("settingsBtn").onclick=openSettings;
 
 function gv(id){const e=document.getElementById(id);return e?(""+e.value).trim():""}
-function ldapModeToggle(){document.getElementById("lSearch").style.display=document.getElementById("lMode").value==="search"?"block":"none"}
-function ldapFormCfg(){return{enabled:document.getElementById("lEnabled").checked,uri:gv("lUri"),ca:gv("lCa"),reqcert:gv("lReqcert"),bind_mode:gv("lMode"),user_dn_template:gv("lTpl"),bind_dn:gv("lBindDn"),base_dn:gv("lBaseDn"),user_filter:gv("lFilter"),required_group:gv("lGroup"),bind_pw:document.getElementById("lBindPw").value}}
+let ACCESS_CURRENT=null;
 async function loadAccess(){
   const j=await api("auth");if(j.error)return;
-  const bg=j.breakglass||"admin",us=j.htpasswd_users||[];
+  ACCESS_CURRENT=j.current||null;const us=j.users||[];
+  const who=document.getElementById("whoami");if(who&&ACCESS_CURRENT)who.textContent="signed in as "+ACCESS_CURRENT;
   document.getElementById("userRows").innerHTML=us.length?us.map(function(u){
-    const tag=u===bg?' <span class="tag m">break-glass</span>':'';
-    const del=u===bg?'':' <button class="danger sm" data-deluser="'+esc(u)+'">delete</button>';
-    return '<tr><td>'+esc(u)+tag+'</td><td class="r"><button class="ghost sm" data-resetuser="'+esc(u)+'">reset password</button>'+del+'</td></tr>'}).join("")
-    :'<tr><td colspan="2" class="muted">no local users yet</td></tr>';
-  const um=document.getElementById("userMsg");
-  if(!j.htpasswd_available){flash("userMsg","htpasswd not installed on the host — run: sudo apt-get install apache2-utils",false)}else if(um){um.className="msg";um.textContent=""}
+    const me=u===ACCESS_CURRENT?' <span class="tag m">you</span>':'';
+    const del=(u===ACCESS_CURRENT||us.length<=1)?'':' <button class="danger sm" data-deluser="'+esc(u)+'">delete</button>';
+    return '<tr><td>'+esc(u)+me+'</td><td class="r"><button class="ghost sm" data-resetuser="'+esc(u)+'">reset password</button>'+del+'</td></tr>'}).join("")
+    :'<tr><td colspan="2" class="muted">no users yet</td></tr>';
   const ur=document.getElementById("userRows");
   ur.querySelectorAll("[data-resetuser]").forEach(function(b){b.onclick=function(){document.getElementById("nuUser").value=b.dataset.resetuser;document.getElementById("nuPass").focus()}});
   ur.querySelectorAll("[data-deluser]").forEach(function(b){b.onclick=function(){delUser(b.dataset.deluser)}});
-  const L=j.ldap||{};
-  document.getElementById("lEnabled").checked=!!L.enabled;
-  document.getElementById("lUri").value=L.uri||"";document.getElementById("lCa").value=L.ca||"";
-  document.getElementById("lReqcert").value=L.reqcert||"demand";document.getElementById("lMode").value=L.bind_mode||"direct";
-  document.getElementById("lTpl").value=L.user_dn_template||"";document.getElementById("lBindDn").value=L.bind_dn||"";
-  document.getElementById("lBindPw").value="";document.getElementById("lBindPw").placeholder=L.bind_pw_set?"(unchanged — leave blank to keep)":"";
-  document.getElementById("lBaseDn").value=L.base_dn||"";document.getElementById("lFilter").value=L.user_filter||"";
-  document.getElementById("lGroup").value=L.required_group||"";
-  ldapModeToggle();
-  if(DEMO)document.getElementById("grpLoad").click();
 }
-function delUser(u){if(!confirm("Delete local user "+u+"?"))return;
+function delUser(u){if(!confirm("Delete user "+u+"?"))return;
   api("auth/users",{method:"POST",headers:hdr(),body:JSON.stringify({action:"delete",username:u})}).then(function(j){flash("userMsg",j.message||(j.ok?"deleted":"failed"),!!j.ok);loadAccess()})}
 document.getElementById("userAdd").onclick=async function(){
   const j=await api("auth/users",{method:"POST",headers:hdr(),body:JSON.stringify({action:"set",username:gv("nuUser"),password:document.getElementById("nuPass").value})});
   flash("userMsg",j.message||(j.ok?"saved":"failed"),!!j.ok);
   if(j.ok){document.getElementById("nuUser").value="";document.getElementById("nuPass").value="";loadAccess()}};
-document.getElementById("lMode").onchange=ldapModeToggle;
-document.getElementById("ldapSave").onclick=async function(){
-  const j=await api("auth/ldap",{method:"POST",headers:hdr(),body:JSON.stringify(ldapFormCfg())});
-  flash("ldapMsg",j.ok?"LDAP settings saved":("✗ "+(j.error||"failed")),!!j.ok);if(j.ok)loadAccess()};
-document.getElementById("ldapTest").onclick=async function(){
-  const out=document.getElementById("ldapOut");out.textContent="testing…";
-  const cfg=ldapFormCfg();cfg.test_user=gv("lTestUser");cfg.test_pass=document.getElementById("lTestPass").value;
-  const j=await api("auth/ldap/test",{method:"POST",headers:hdr(),body:JSON.stringify(cfg)});
-  out.innerHTML=(j.ok?'<span style="color:var(--ok)">✓ '+esc(j.reason||"ok")+'</span>':'<span style="color:var(--bad)">✗ '+esc(j.reason||j.error||"failed")+'</span>')+((j.steps&&j.steps.length)?'\n'+j.steps.map(esc).join('\n'):'')};
-document.getElementById("grpLoad").onclick=async function(){
-  const o=document.getElementById("grpOut");o.innerHTML="loading…";
-  const j=await api("auth/group");
-  o.innerHTML=j.ok?((j.members&&j.members.length)?j.members.map(function(m){return '<div>'+esc(m)+'</div>'}).join(""):'<div class="muted">'+esc(j.note||"no members")+'</div>'):'<div class="muted">✗ '+esc(j.error||"failed")+'</div>'};
 
 // ---- last-updated ticker ----
 let LAST_UPDATED=0;
@@ -1131,7 +1074,7 @@ async function pollLog(){
 async function loadPresets(){const j=await api("presets");PRESETS=j.presets||[];const sel=document.getElementById("preset");for(const p of PRESETS){const o=document.createElement("option");o.value=p.id;o.textContent=p.label;sel.appendChild(o)}}
 
 setView(location.hash.slice(1)||"overview");
-loadPresets().then(()=>{togglePreset();refresh();applyRefresh(getRefreshSec());pollLog();setInterval(pollLog,3000);
+loadPresets().then(()=>{togglePreset();refresh();applyRefresh(getRefreshSec());pollLog();setInterval(pollLog,3000);api("auth").then(function(j){const w=document.getElementById("whoami");if(w&&j&&j.current)w.textContent="signed in as "+j.current});
   if(DEMO)setTimeout(()=>{try{document.getElementById("srcGen").click();document.getElementById("srvLoad").click()}catch(e){}},500);
 });
 </script>

@@ -21,7 +21,8 @@ with no backend and no real hostnames — so the same shots are safe for the pub
    | `sync.png` | Sync (run status, daily timer, live apt-mirror log) |
    | `sources.png` | Client sources (pick repos → generated `sources.list` + install script) |
    | `server.png` | Server (mirror.list & setup, DR backup, landing/bootstrap publish) |
-   | `access.png` | Access (local users + LDAP/LDAPS config + required-group members) |
+   | `access.png` | Access (dashboard login users — SQLite/PBKDF2) |
+   | `login.png` | Sign-in page (built-in login) |
 
    In demo mode the **Client sources** and **Server** views auto-populate on load (they
    call *Generate* / *Load* for you), so a plain screenshot of `…/?demo=1#sources` and

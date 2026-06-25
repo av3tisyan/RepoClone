@@ -8,6 +8,10 @@ Operational files for **`apt-mirror`** on **Debian 13**, **`/opt/apt`**, clients
 
 The **mirror-manager** dashboard (add repos, sync, disk/budget, snapshots, client setup):
 
+Sign-in (built-in login — local users in SQLite):
+
+![Sign in](docs/screenshots/login.png)
+
 | Overview | Repositories |
 |---|---|
 | ![Overview](docs/screenshots/overview.png) | ![Repositories](docs/screenshots/repositories.png) |
@@ -19,7 +23,7 @@ The **mirror-manager** dashboard (add repos, sync, disk/budget, snapshots, clien
 | Sync | Client sources |
 |---|---|
 | ![Sync](docs/screenshots/sync.png) | ![Client sources](docs/screenshots/sources.png) |
-| **Server** | **Access (users + LDAP)** |
+| **Server** | **Access (users)** |
 | ![Server](docs/screenshots/server.png) | ![Access](docs/screenshots/access.png) |
 
 > Generate these from the built-in **demo mode** (`…/?demo=1`) — public-safe mock data, no

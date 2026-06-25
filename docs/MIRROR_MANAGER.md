@@ -29,7 +29,7 @@ air-gapped/offline sync host without `pip`.
 
 The dashboard is an enterprise-style single-page app shell: a left sidebar nav switches
 between **Overview** (KPI cards + storage), **Repositories**, **Catalog**, **Add repository**,
-**Sync**, **Client sources**, **Server**, and **Access** (users + LDAP) views (deep-linkable via `#hash`). It ships as
+**Sync**, **Client sources**, **Server**, and **Access** (users + login) views (deep-linkable via `#hash`). It ships as
 one self-contained `index.html` (no build step, no external assets — airgap-safe) and is
 accessible: keyboard/focus-visible, `Escape`-to-close and focus-restoring modals, `aria-live`
 toasts/status, a connection-lost banner, and reduced-motion support.
@@ -42,7 +42,7 @@ toasts/status, a connection-lost banner, and reduced-motion support.
 | `scripts/mirror-manager/index.html` | Self-contained dashboard (no external assets) |
 | `scripts/mirror-manager/presets.json` | Known-repo presets (keep in sync with `config/mirror.list`) |
 | `deploy/systemd/mirror-manager.service` | systemd unit (runs as the non-root `apt-manager` user by default, binds 127.0.0.1:8080) |
-| `deploy/nginx/mirror-manager.conf` | Optional LAN reverse proxy with basic auth + TLS |
+| `deploy/nginx/mirror-manager.conf` | Optional TLS reverse proxy (the dashboard handles login) |
 | `scripts/setup-mirror-manager.sh` | Installer |
 
 ## Install
@@ -74,14 +74,12 @@ The daemon listens on **localhost only**. Ways to reach it:
    # via a jump host:  ssh -J <jump-host>[:port] -L 8080:127.0.0.1:8080 <sync-host>
    ```
 2. **`https://apt-manager.example.com`** — a separate nginx reverse proxy (not the
-   `apt.example.com` vhost) fronts the daemon with TLS + HTTP Basic auth validated
-   against **LDAPS** (see *LDAPS authentication* below; a static htpasswd is also an option).
-   The vhost is `deploy/nginx/mirror-manager.conf`; point DNS for
-   `apt-manager.example.com` at the proxy host. Because the daemon binds
-   `127.0.0.1:8080` on the **sync host**, the proxy reaches it either by running on the
-   same host or via an SSH tunnel (see the header of that config); don't expose `:8080`
-   raw on the LAN — it's a root-privileged API. The dashboard uses a **relative API base**,
-   so it works at the proxy's root (or any subpath) without changes.
+   `apt.example.com` vhost) terminates TLS and forwards to the daemon; the **dashboard's
+   own login** handles authentication (see *Authentication* below). The vhost is
+   `deploy/nginx/mirror-manager.conf`; point DNS for `apt-manager.example.com` at the
+   proxy host. It can run on the same host as the daemon or a separate one (forward to
+   `<sync-ip>:8080` or via an SSH tunnel — see that config's header). The dashboard uses a
+   **relative API base**, so it works at the proxy's root or any subpath.
 
 3. **Direct LAN access (bind to the subnet)** — bind the daemon to a routable address and
    restrict who may reach it with the built-in CIDR allowlist:
@@ -91,7 +89,7 @@ The daemon listens on **localhost only**. Ways to reach it:
    ```
    `MM_ALLOW` is enforced **in the daemon** (returns 403 to other source IPs), so even
    though it binds `0.0.0.0` it only serves your admin subnet. Use `--allow 0.0.0.0/0` to
-   open it to everyone (not recommended — it's a root API; pair with `--token` at least).
+   open it to everyone (not recommended — rely on the built-in login and pair with `--token`).
    > If you put nginx in front, the daemon's peer is the proxy, not the user — so do the
    > IP filtering in nginx (`allow 10.0.0.0/26; deny all;`) instead of `MM_ALLOW`.
 
@@ -231,68 +229,25 @@ never touched — so the manager and your existing `config/mirror.list` coexist.
 preset that you already maintain by hand would create a managed duplicate; remove the manual
 lines first if you want the manager to own it.)
 
-## Users & access (Access tab)
+## Authentication (built-in login)
 
-The **Access** view (sidebar → Operations → Access) manages the front-door auth the nginx
-proxy enforces — no hand-editing of env vars or password files:
+The dashboard has its **own login** — no nginx `auth_request`, no LDAP, no extra packages.
+Users live in a local **SQLite** database (`/opt/apt/manager/users.db`) with **PBKDF2**-hashed
+passwords; sessions are signed cookies (HMAC, `MM_SESSION_TTL` seconds, default 12h). It's all
+Python stdlib, so it works on an air-gapped host with no `pip`.
 
-- **Local users** — add / reset / delete accounts in an `htpasswd` file
-  (`/opt/apt/manager/htpasswd`; bcrypt, needs `apt install apache2-utils`). The **`admin`**
-  account is **break-glass**: it always works even if the directory is down, and can't be
-  deleted from the UI. The installer creates it and prints a generated password once
-  (override with `setup-mirror-manager.sh --admin-pass`).
-- **LDAP / LDAPS** — edit the directory connection (URI, CA, TLS verify, direct/search bind,
-  required group), **Test connection** (optionally against a real user), then **Save**.
-  Stored in `/opt/apt/manager/ldap.json`.
-- **Required group members** — read-only list of who is in the required group (membership is
-  managed in your directory, not here).
+- **First admin** — `setup-mirror-manager.sh` creates `admin` on first install and prints a
+  generated password once (override with `--admin-pass`, or set `MM_ADMIN_PASS`). If the DB is
+  empty at startup the daemon also bootstraps an `admin` and logs the password. Seed/reset any
+  time: `sudo -u apt-manager python3 /opt/apt/mirror-manager/mirror_manager.py --add-user admin`.
+- **Manage users** — the **Access** view (sidebar → Operations → Access): add, reset password,
+  delete. You can't delete the account you're signed in as, or the last remaining user.
+- **Log out** — the control in the top-right clears the session cookie.
 
-Both files are written by the dashboard (as `apt-manager`) and read by `ldap_auth.py`, which
-checks **local users first, then LDAP** — so the break-glass `admin` works even when the
-directory is unreachable. This requires the auth backend to run on the **same host** as the
-dashboard (so it can read `/opt/apt/manager`); a separate-host proxy falls back to env-var
-LDAP config and isn't UI-managed.
-
-> **Lockout safety:** keep the `admin` password. If an LDAP change is wrong, log in as
-> `admin` (always checked locally) and fix it — and use *Test connection* before *Save*.
-
-## LDAPS authentication (nginx)
-
-nginx has no native LDAP auth, so the proxy validates HTTP Basic credentials with a small
-backend (`scripts/mirror-manager/ldap_auth.py`) via `auth_request`. That backend checks the
-local `htpasswd` first, then your directory over **LDAPS**. The user still gets the normal
-browser Basic-auth prompt; the password is checked against the htpasswd file or AD/LDAP.
-
-On the **reverse-proxy host**:
-
-```bash
-sudo apt-get install -y python3-ldap
-sudo install -d -m0755 /opt/apt/mirror-manager
-sudo install -m0644 scripts/mirror-manager/ldap_auth.py /opt/apt/mirror-manager/ldap_auth.py
-sudo cp deploy/systemd/mirror-manager-ldap-auth.service /etc/systemd/system/
-sudoedit /etc/systemd/system/mirror-manager-ldap-auth.service   # set LDAP_* (see below)
-sudo systemctl daemon-reload && sudo systemctl enable --now mirror-manager-ldap-auth
-sudo cp deploy/nginx/mirror-manager.conf /etc/nginx/sites-available/ && \
-  sudo ln -sf /etc/nginx/sites-available/mirror-manager.conf /etc/nginx/sites-enabled/
-sudo nginx -t && sudo systemctl reload nginx
-```
-
-Bind models (env in the service unit):
-
-- **direct** (default, simplest for AD): `LDAP_BIND_MODE=direct` +
-  `LDAP_USER_DN_TEMPLATE={user}@example.com` — binds straight as the user, no service
-  account needed.
-- **search**: `LDAP_BIND_MODE=search` with `LDAP_BIND_DN`/`LDAP_BIND_PW`/`LDAP_BASE_DN`/
-  `LDAP_USER_FILTER=(sAMAccountName={user})` — a service account finds the user, then the
-  daemon rebinds as them to verify the password.
-
-Always use an `ldaps://…:636` `LDAP_URI`; set `LDAP_CA` to verify the server cert
-(`LDAP_TLS_REQCERT=demand`). Restrict who may log in with
-`LDAP_REQUIRED_GROUP=CN=apt-admins,OU=Groups,DC=example,DC=com` (AD nested groups
-supported). Successful auths are cached `LA_CACHE_TTL` seconds; denials log the username
-and reason only — never the password. These `LDAP_*` env values are **fallback defaults**:
-once you save settings in the **Access** tab they live in `/opt/apt/manager/ldap.json` and
-take precedence, and local users in the htpasswd are always accepted regardless of LDAP.
+Because auth is in the app, **nginx is just a TLS reverse proxy** (`deploy/nginx/mirror-manager.conf`)
+and may run on a separate host — no shared files or auth backend to co-locate. Mutating API
+calls also require the `X-MM: 1` header (CSRF guard); the session cookie is `HttpOnly` +
+`SameSite=Lax`.
 
 ## Security model
 
@@ -302,9 +257,9 @@ take precedence, and local users in the htpasswd are always accepted regardless 
   (nothing else). It still triggers privileged work, so **treat access as
   sync-host-privileged**, but it is no longer root-equivalent. (`--user root` opts back into
   the old root behavior, which writes `/etc/apt/mirror.list` directly — not recommended.)
-- It has **no built-in login.** Defence comes from: binding to localhost by default; an
-  `MM_ALLOW` CIDR allowlist for direct LAN binds; an optional `MM_TOKEN` shared secret; and
-  an `X-MM: 1` header required on mutating calls (blunts CSRF from a stray browser form).
+- **Login is built in** (SQLite users + signed-cookie sessions); every route requires a
+  valid session, and mutating calls also require the `X-MM: 1` header (CSRF guard). Extra
+  network defence: localhost bind by default, an optional `MM_ALLOW` CIDR allowlist, `MM_TOKEN`.
 - **Do not bind `0.0.0.0` without `MM_ALLOW` and/or `MM_TOKEN`** — that opens the root API
   to the whole network (the installer and daemon both warn about this).
 - Best exposure: front it with TLS + basic auth (`apt-manager.example.com`,

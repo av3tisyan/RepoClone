@@ -17,8 +17,8 @@
 #                    Empty = allow all. Strongly recommended whenever --listen-host != 127.0.0.1.
 #   --budget-tb N    Disk budget in TB for the dashboard gauge (default 1.7)
 #   --token STR      Shared secret; clients must pass ?token=STR (default: none)
-#   --admin-pass STR Initial break-glass 'admin' password for the nginx front door
-#                    (htpasswd/bcrypt; default: generated and printed once).
+#   --admin-pass STR Initial dashboard 'admin' password (SQLite/PBKDF2;
+#                    default: generated and printed once).
 #   --user NAME      Dedicated NON-ROOT user to run the daemon as (default: apt-manager).
 #                    Auto-created with all needed permissions: ownership of
 #                    /opt/apt/{keys,www,var} + the app, /etc/apt/mirror.list symlinked to
@@ -123,26 +123,22 @@ EOF
   fi
 fi
 
-# --- Local auth files: break-glass admin for the nginx front door (Access tab) ---
+# --- Initial dashboard admin (SQLite user DB; first install only) ---
 AUTH_DIR=/opt/apt/manager
-install -d -m0755 "$AUTH_DIR"
-HTPW="$AUTH_DIR/htpasswd"
-if command -v htpasswd >/dev/null 2>&1; then
-  if [ ! -f "$HTPW" ]; then
-    if [ -z "$ADMIN_PASS" ]; then
-      ADMIN_PASS="$(head -c16 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | cut -c1-16)"
-      GENERATED=1
-    fi
-    printf '%s' "$ADMIN_PASS" | htpasswd -iBc "$HTPW" admin >/dev/null 2>&1 \
-      && echo "==> Created break-glass admin in $HTPW" \
-      || echo "WARN: could not create $HTPW" >&2
-    [ -n "${GENERATED:-}" ] && echo "    admin password (SAVE THIS - shown once): $ADMIN_PASS"
+install -d -m0700 "$AUTH_DIR"
+if [ ! -f "$AUTH_DIR/users.db" ]; then
+  if [ -z "$ADMIN_PASS" ]; then
+    ADMIN_PASS="$(python3 -c 'import secrets;print(secrets.token_urlsafe(18))')"
+    GENERATED=1
   fi
-  if [ -n "$MGR_USER" ] && [ "$MGR_USER" != "root" ]; then chown "$MGR_USER":"$MGR_USER" "$HTPW" 2>/dev/null || true; fi
-  chmod 0600 "$HTPW" 2>/dev/null || true
-else
-  echo "WARN: htpasswd not found - local user management needs 'apt install apache2-utils'." >&2
+  if MM_AUTH_DIR="$AUTH_DIR" python3 "$DEST/mirror_manager.py" --add-user admin --password "$ADMIN_PASS" >/dev/null 2>&1; then
+    echo "==> Created dashboard admin 'admin' in $AUTH_DIR/users.db"
+    [ -n "${GENERATED:-}" ] && echo "    admin password (SAVE THIS - shown once): $ADMIN_PASS"
+  else
+    echo "WARN: could not seed admin; the daemon creates one on first start (see journal)." >&2
+  fi
 fi
+[ -n "$MGR_USER" ] && [ "$MGR_USER" != "root" ] && chown -R "$MGR_USER":"$MGR_USER" "$AUTH_DIR" 2>/dev/null || true
 
 echo "==> Installing systemd unit"
 UNIT=/etc/systemd/system/mirror-manager.service
@@ -207,7 +203,7 @@ if [ "$ENABLE" -eq 1 ]; then
   fi
   [ -n "$TOKEN" ] && echo "Token required: append ?token=$TOKEN to the URL"
   echo "Front with TLS+auth at apt-manager.example.com: see deploy/nginx/mirror-manager.conf"
-  echo "Manage local users + LDAP/LDAPS in the dashboard Access tab (auth enforced by that proxy + ldap_auth.py)."
+  echo "Sign in with the admin above; manage dashboard users in the Access tab."
 else
   echo "==> Installed (not enabled). Start with: systemctl enable --now mirror-manager.service"
 fi

@@ -35,14 +35,17 @@ Config via environment (all optional):
 
 __version__ = "1.0.0"
 
+import base64
 import gzip
 import hashlib
+import hmac
 import io
 import ipaddress
 import json
 import os
 import re
 import shutil
+import sqlite3
 import subprocess
 import tarfile
 import threading
@@ -73,11 +76,9 @@ SNAPSHOT_SH = os.environ.get("MM_SNAPSHOT_SH", "/opt/apt/var/mirror-snapshot.sh"
 SNAP_DIR = os.environ.get("MM_SNAP_DIR", "/opt/apt/snapshots")
 # Auth/user management (read by ldap_auth.py; written here as the apt-manager user)
 AUTH_DIR = os.environ.get("MM_AUTH_DIR", "/opt/apt/manager")
-LDAP_CONF = os.environ.get("MM_LDAP_CONF", os.path.join(AUTH_DIR, "ldap.json"))
-HTPASSWD = os.environ.get("MM_HTPASSWD", os.path.join(AUTH_DIR, "htpasswd"))
-LDAP_AUTH_URL = os.environ.get("MM_LDAP_AUTH_URL", "http://127.0.0.1:8889").rstrip("/")
-BREAKGLASS_USER = os.environ.get("MM_BREAKGLASS_USER", "admin")
-INSECURE_LDAP_OK = os.environ.get("MM_ALLOW_INSECURE_LDAP") == "1"
+USERS_DB = os.environ.get("MM_USERS_DB", os.path.join(AUTH_DIR, "users.db"))
+SECRET_FILE = os.environ.get("MM_SECRET_FILE", os.path.join(AUTH_DIR, "secret"))
+SESSION_TTL = int(os.environ.get("MM_SESSION_TTL", str(12 * 3600)))
 
 # Marker that "disables" a managed deb/clean line (apt-mirror ignores the comment).
 OFF = "#MMOFF# "
@@ -1119,123 +1120,201 @@ def run(cmd, timeout=30, env=None):
 
 
 
-# ---- auth / user management (config consumed by ldap_auth.py) ---------------- #
-LDAP_FIELDS = ("uri", "ca", "reqcert", "bind_mode", "user_dn_template",
-               "bind_dn", "base_dn", "user_filter", "required_group")
+# ---- authentication: local users (SQLite) + signed-cookie sessions ----------- #
 USER_RE = re.compile(r"^[A-Za-z0-9._@-]{1,64}$")
 
 
-def load_ldap_conf():
+def _secret():
+    """Persistent random key that signs session cookies."""
     try:
-        with open(LDAP_CONF) as fh:
-            return json.load(fh)
-    except Exception:
-        return {}
+        with open(SECRET_FILE, "rb") as fh:
+            return fh.read()
+    except OSError:
+        os.makedirs(AUTH_DIR, mode=0o700, exist_ok=True)
+        key = os.urandom(32)
+        fd = os.open(SECRET_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.write(fd, key)
+        os.close(fd)
+        return key
 
 
-def ldap_conf_public():
-    """LDAP config for the UI — never returns the bind password itself."""
-    c = load_ldap_conf()
-    out = {k: c.get(k, "") for k in LDAP_FIELDS}
-    out["enabled"] = bool(c.get("enabled", False))
-    out["bind_pw_set"] = bool(c.get("bind_pw"))
-    return out
-
-
-def save_ldap_conf(body):
-    c = load_ldap_conf()
-    for k in LDAP_FIELDS:
-        if k in body:
-            c[k] = ("" if body[k] is None else str(body[k]))
-    # never persist an insecure TLS mode unless the operator explicitly opted in
-    rc = str(c.get("reqcert") or "demand")
-    if rc != "demand" and not INSECURE_LDAP_OK:
-        rc = "demand"
-    c["reqcert"] = rc
-    c["enabled"] = bool(body.get("enabled", c.get("enabled", False)))
-    if body.get("bind_pw"):                 # only replace when a new one is supplied
-        c["bind_pw"] = str(body["bind_pw"])
-    if body.get("clear_bind_pw"):
-        c.pop("bind_pw", None)
+def _db():
     os.makedirs(AUTH_DIR, mode=0o700, exist_ok=True)
-    tmp = LDAP_CONF + ".tmp"
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)  # 0600 from creation
-    with os.fdopen(fd, "w") as fh:
-        json.dump(c, fh, indent=2)
-    os.replace(tmp, LDAP_CONF)
-    return ldap_conf_public()
-
-
-def htpasswd_users():
-    users = []
+    conn = sqlite3.connect(USERS_DB, timeout=10)
+    conn.execute("CREATE TABLE IF NOT EXISTS users("
+                 "username TEXT PRIMARY KEY, pwhash TEXT NOT NULL, created INTEGER)")
     try:
-        with open(HTPASSWD) as fh:
-            for line in fh:
-                line = line.strip()
-                if line and ":" in line and not line.startswith("#"):
-                    users.append(line.split(":", 1)[0])
+        os.chmod(USERS_DB, 0o600)
     except OSError:
         pass
-    return sorted(set(users))
+    return conn
 
 
-def htpasswd_set(user, password):
-    if not USER_RE.match(user or ""):
-        return False, "invalid username (allowed: letters, digits, . _ @ -)"
+def hash_pw(pw, salt=None, iters=200_000):
+    salt = salt or os.urandom(16)
+    dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), salt, iters)
+    return f"pbkdf2_sha256${iters}${salt.hex()}${dk.hex()}"
+
+
+def verify_pw(pw, stored):
+    try:
+        _algo, iters, salth, dkh = stored.split("$")
+        dk = hashlib.pbkdf2_hmac("sha256", pw.encode("utf-8"), bytes.fromhex(salth), int(iters))
+        return hmac.compare_digest(dk.hex(), dkh)
+    except Exception:
+        return False
+
+
+def list_users():
+    try:
+        with _db() as c:
+            return [r[0] for r in c.execute("SELECT username FROM users ORDER BY username")]
+    except Exception:
+        return []
+
+
+def set_user(username, password):
+    if not USER_RE.match(username or ""):
+        return False, "invalid username (letters, digits, . _ @ -)"
     if not password or len(password) < 8:
         return False, "password must be at least 8 characters"
-    if shutil.which("htpasswd") is None:
-        return False, "htpasswd not found — install apache2-utils on the sync host"
-    os.makedirs(AUTH_DIR, mode=0o700, exist_ok=True)
-    create = ["-c"] if not os.path.exists(HTPASSWD) else []
-    try:  # -i reads the password from stdin so it never appears on the process argv
-        r = subprocess.run(["htpasswd", "-iB"] + create + [HTPASSWD, user],
-                           input=password.encode("utf-8"), capture_output=True, timeout=15)
-    except Exception as exc:
-        return False, f"htpasswd error: {exc}"
-    if r.returncode != 0:
-        return False, (r.stderr.decode("utf-8", "replace") or "htpasswd failed").strip()
-    try:
-        os.chmod(HTPASSWD, 0o600)
-    except OSError:
-        pass
+    with _db() as c:
+        c.execute("INSERT INTO users(username, pwhash, created) VALUES(?,?,?) "
+                  "ON CONFLICT(username) DO UPDATE SET pwhash=excluded.pwhash",
+                  (username, hash_pw(password), int(time.time())))
     return True, "ok"
 
 
-def htpasswd_delete(user):
-    if user == BREAKGLASS_USER:
-        return False, f"cannot delete the break-glass admin ({BREAKGLASS_USER})"
-    if user not in htpasswd_users():
-        return False, "no such local user"
-    if shutil.which("htpasswd") is None:
-        return False, "htpasswd not found — install apache2-utils"
-    r = run(["htpasswd", "-D", HTPASSWD, user], timeout=15)
-    return (r.returncode == 0), ((r.stderr or "ok").strip())
+def del_user(username, current=None):
+    users = list_users()
+    if username not in users:
+        return False, "no such user"
+    if username == current:
+        return False, "can't delete the account you're signed in as"
+    if len(users) <= 1:
+        return False, "can't delete the last user"
+    with _db() as c:
+        c.execute("DELETE FROM users WHERE username=?", (username,))
+    return True, "ok"
 
 
-def ldap_proxy(path, payload=None, timeout=12):
-    """Delegate LDAP bind/test/group-listing to ldap_auth.py — the daemon is
-    stdlib-only and has no LDAP client."""
-    data = json.dumps(payload).encode("utf-8") if payload is not None else None
-    req = urllib.request.Request(
-        LDAP_AUTH_URL + path, data=data,
-        method=("POST" if data is not None else "GET"),
-        headers={"Content-Type": "application/json"})
+def verify_login(username, password):
+    if not username or not password:
+        return False
+    with _db() as c:
+        row = c.execute("SELECT pwhash FROM users WHERE username=?", (username,)).fetchone()
+    return bool(row) and verify_pw(password, row[0])
+
+
+def _user_token(username):
+    """Short fingerprint of the user's current password hash. Binding a session to it
+    means deleting the user OR changing their password immediately invalidates it."""
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.loads(r.read().decode("utf-8") or "{}")
-    except Exception as exc:
-        return {"ok": False, "error": f"LDAP auth backend not reachable at {LDAP_AUTH_URL} — start mirror-manager-ldap-auth on this host (local users still work). ({exc})"}
+        with _db() as c:
+            row = c.execute("SELECT pwhash FROM users WHERE username=?", (username,)).fetchone()
+    except Exception:
+        return None
+    return hashlib.sha256(row[0].encode("utf-8")).hexdigest()[:16] if row else None
 
 
-def auth_overview():
-    return {
-        "htpasswd_users": htpasswd_users(),
-        "htpasswd_available": shutil.which("htpasswd") is not None,
-        "breakglass": BREAKGLASS_USER,
-        "ldap": ldap_conf_public(),
-        "auth_backend": LDAP_AUTH_URL,
-    }
+def make_session(user):
+    tok = _user_token(user) or ""
+    msg = f"{user}|{int(time.time()) + SESSION_TTL}|{tok}".encode("utf-8")
+    sig = hmac.new(_secret(), msg, hashlib.sha256).hexdigest()
+    return base64.urlsafe_b64encode(msg).decode() + "." + sig
+
+
+def read_session(cookie):
+    if not cookie:
+        return None
+    try:
+        b64, sig = cookie.split(".", 1)
+        msg = base64.urlsafe_b64decode(b64)
+        if not hmac.compare_digest(sig, hmac.new(_secret(), msg, hashlib.sha256).hexdigest()):
+            return None
+        user, exp, tok = msg.decode("utf-8").split("|", 2)
+        if int(exp) <= time.time():
+            return None
+        cur = _user_token(user)
+        if cur is None or not hmac.compare_digest(tok, cur):
+            return None       # user deleted or password changed since issuance
+        return user
+    except Exception:
+        return None
+
+
+_login_fails = {}             # ip -> (count, window_start)
+_LOGIN_LOCK = threading.Lock()
+
+
+def login_throttled(ip):
+    now = time.time()
+    with _LOGIN_LOCK:
+        cnt, start = _login_fails.get(ip, (0, now))
+        if now - start > 300:
+            return False
+        return cnt >= 10
+
+
+def login_fail(ip):
+    now = time.time()
+    with _LOGIN_LOCK:
+        cnt, start = _login_fails.get(ip, (0, now))
+        if now - start > 300:
+            cnt, start = 0, now
+        _login_fails[ip] = (cnt + 1, start)
+
+
+def login_ok(ip):
+    with _LOGIN_LOCK:
+        _login_fails.pop(ip, None)
+
+
+def ensure_admin():
+    if list_users():
+        return
+    env_pw = os.environ.get("MM_ADMIN_PASS")
+    pw = env_pw or base64.urlsafe_b64encode(os.urandom(12)).decode().rstrip("=")
+    ok, _ = set_user("admin", pw)
+    if not ok:
+        return
+    if env_pw:
+        print("mirror-manager: created initial admin 'admin' from MM_ADMIN_PASS.")
+        return
+    path = os.path.join(AUTH_DIR, "initial-admin-password")
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        os.write(fd, (pw + "\n").encode("utf-8"))
+        os.close(fd)
+        print(f"mirror-manager: created initial admin 'admin'; password written to {path} "
+              "(0600). Sign in, change it in the Access tab, then delete that file.")
+    except OSError:
+        print("mirror-manager: created initial admin 'admin' (set MM_ADMIN_PASS to pick the password).")
+
+
+def login_page_html(error=""):
+    err = '<p class="err">' + error + '</p>' if error else ''
+    return ("""<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in — mirror-manager</title><style>
+:root{--bg:#070b13;--card:#111b2e;--line:#1d2d45;--fg:#e2e8f0;--muted:#64748b;--pri:#3b82f6}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);
+color:var(--fg);font:14px/1.5 'Inter',ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px;width:340px;
+box-shadow:0 10px 34px rgba(0,0,0,.5)}.brand{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,#3b82f6,#1d4ed8);
+box-shadow:0 0 0 1px rgba(59,130,246,.3),0 4px 12px rgba(59,130,246,.22)}
+.brand b{font-size:14px;font-weight:700}.brand div{font-size:10px;color:var(--muted)}
+label{display:block;font-size:12px;color:var(--muted);margin:14px 0 5px}
+input{width:100%;background:#0c1322;color:var(--fg);border:1px solid #27395a;border-radius:7px;padding:10px 11px;font:inherit}
+input:focus{outline:none;border-color:var(--pri);box-shadow:0 0 0 3px rgba(59,130,246,.13)}
+button{width:100%;margin-top:18px;background:var(--pri);color:#fff;border:0;border-radius:7px;padding:10px;font:inherit;font-weight:600;cursor:pointer}
+.err{background:rgba(239,68,68,.13);color:#f87171;border:1px solid rgba(239,68,68,.3);border-radius:7px;padding:8px 11px;font-size:13px;margin-top:14px}
+</style></head><body><form class="card" method="POST" action="login">
+<div class="brand"><span class="logo"></span><span><b>RepoClone</b><div>control plane</div></span></div>
+<label for="u">Username</label><input id="u" name="username" autofocus autocomplete="username">
+<label for="p">Password</label><input id="p" name="password" type="password" autocomplete="current-password">
+""" + err + """<button type="submit">Sign in</button></form></body></html>""")
 
 
 def sync_state():
@@ -1402,11 +1481,80 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return {}
 
+    # -- auth / session ----------------------------------------------------- #
+    def _cookie(self, name):
+        for part in self.headers.get("Cookie", "").split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == name:
+                return v
+        return None
+
+    def _user(self):
+        return read_session(self._cookie("mm_session"))
+
+    def _redirect(self, location, cookie=None):
+        self.send_response(302)
+        self.send_header("Location", location)
+        if cookie is not None:
+            self.send_header("Set-Cookie", cookie)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _need_auth(self, path):
+        """Return the logged-in user, or send 401 (api) / redirect to /login and return None."""
+        u = self._user()
+        if u:
+            return u
+        if path.startswith("/api/"):
+            self._send(401, {"error": "not authenticated"})
+        else:
+            self._redirect("/login")
+        return None
+
+    def _login_page(self, error=""):
+        return self._send(200, login_page_html(error), "text/html; charset=utf-8")
+
+    def _do_login(self):
+        ip = self.client_address[0]
+        if login_throttled(ip):
+            return self._login_page("Too many attempts — wait a few minutes and try again.")
+        # Reject cross-origin login POSTs (anti-CSRF / login fixation).
+        origin = self.headers.get("Origin", "")
+        if origin and urllib.parse.urlparse(origin).netloc != self.headers.get("Host", ""):
+            return self._login_page("Invalid request origin.")
+        n = int(self.headers.get("Content-Length", "0") or "0")
+        raw = self.rfile.read(n).decode("utf-8", "replace") if n else ""
+        form = urllib.parse.parse_qs(raw)
+        user = (form.get("username", [""])[0]).strip()
+        pw = form.get("password", [""])[0]
+        sec = "; Secure" if self.headers.get("X-Forwarded-Proto", "") == "https" else ""
+        if verify_login(user, pw):
+            login_ok(ip)
+            cookie = (f"mm_session={make_session(user)}; HttpOnly; SameSite=Lax{sec}; "
+                      f"Path=/; Max-Age={SESSION_TTL}")
+            write_audit({"action": "login", "detail": "ok", "user": user, "ip": ip})
+            return self._redirect("/", cookie)
+        login_fail(ip)
+        write_audit({"action": "login", "detail": "denied", "user": user, "ip": ip})
+        return self._login_page("Invalid username or password.")
+
+    def _logout(self):
+        sec = "; Secure" if self.headers.get("X-Forwarded-Proto", "") == "https" else ""
+        return self._redirect("/login", f"mm_session=; HttpOnly; SameSite=Lax{sec}; Path=/; Max-Age=0")
+
     # -- routing ------------------------------------------------------------ #
     def do_GET(self):
-        if not self._gate():
-            return
         path = urllib.parse.urlparse(self.path).path
+        if not self._ip_ok():
+            return self._send(403, {"error": "forbidden: client IP not in MM_ALLOW"})
+        if not self._authed():
+            return self._send(403, {"error": "bad token"})
+        if path == "/login":
+            return self._login_page()
+        if path == "/logout":
+            return self._logout()
+        if not self._need_auth(path):
+            return
         if path in ("/", "/index.html"):
             try:
                 with open(os.path.join(HERE, "index.html"), "rb") as fh:
@@ -1461,9 +1609,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/backup":
             return self._backup()
         if path == "/api/auth":
-            return self._send(200, auth_overview())
-        if path == "/api/auth/group":
-            return self._send(200, ldap_proxy("/group"))
+            return self._send(200, {"users": list_users(), "current": self._user()})
         return self._send(404, {"error": "not found"})
 
     def _backup(self):
@@ -1490,15 +1636,23 @@ class Handler(BaseHTTPRequestHandler):
         self._audit("backup", "config bundle download")
 
     def _audit(self, action, detail=""):
-        user = self.headers.get("X-Auth-User") or self.headers.get("X-Forwarded-User") or "-"
+        user = self._user() or self.headers.get("X-Auth-User") or "-"
         ip = (self.headers.get("X-Forwarded-For", "").split(",")[0].strip()
               or self.client_address[0])
         write_audit({"action": action, "detail": detail, "user": user, "ip": ip})
 
     def do_POST(self):
-        if not self._gate(mutating=True):
-            return
         path = urllib.parse.urlparse(self.path).path
+        if not self._ip_ok():
+            return self._send(403, {"error": "forbidden: client IP not in MM_ALLOW"})
+        if path == "/login":
+            return self._do_login()
+        if not self._authed():
+            return self._send(403, {"error": "bad token"})
+        if not self._mutating_ok():
+            return self._send(403, {"error": "missing X-MM header"})
+        if not self._need_auth(path):
+            return
         if path == "/api/repos":
             return self._add_repo(self._json_body())
         if path == "/api/estimate":
@@ -1545,31 +1699,31 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, {"ok": True, **res})
             except Exception as exc:
                 return self._send(500, {"error": f"publish failed: {exc}"})
-        if path == "/api/auth/ldap":
-            cfg = save_ldap_conf(self._json_body())
-            self._audit("auth-ldap", "enabled" if cfg.get("enabled") else "disabled")
-            return self._send(200, {"ok": True, "ldap": cfg})
-        if path == "/api/auth/ldap/test":
-            return self._send(200, ldap_proxy("/test", self._json_body()))
         if path == "/api/auth/users":
             b = self._json_body()
             action = (b.get("action") or "set").strip()
             user = (b.get("username") or "").strip()
             if action == "delete":
-                ok, msg = htpasswd_delete(user)
+                ok, msg = del_user(user, self._user())
                 if ok:
                     self._audit("user-delete", user)
                 return self._send(200 if ok else 400, {"ok": ok, "message": msg})
-            ok, msg = htpasswd_set(user, b.get("password") or "")
+            ok, msg = set_user(user, b.get("password") or "")
             if ok:
                 self._audit("user-set", user)
             return self._send(200 if ok else 400, {"ok": ok, "message": msg})
         return self._send(404, {"error": "not found"})
 
     def do_DELETE(self):
-        if not self._gate(mutating=True):
-            return
         path = urllib.parse.urlparse(self.path).path
+        if not self._ip_ok():
+            return self._send(403, {"error": "forbidden: client IP not in MM_ALLOW"})
+        if not self._authed():
+            return self._send(403, {"error": "bad token"})
+        if not self._mutating_ok():
+            return self._send(403, {"error": "missing X-MM header"})
+        if not self._need_auth(path):
+            return
         if path == "/api/repos":
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
             name = q.get("name", [""])[0]
@@ -1724,6 +1878,7 @@ def main():
         print("WARNING: bound to a non-local address with no MM_ALLOW and no MM_TOKEN — "
               "this root-privileged API is open to the whole network. Set MM_ALLOW "
               "(e.g. 10.0.0.0/26) and/or MM_TOKEN, or front it with an authenticated proxy.")
+    ensure_admin()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
@@ -1731,4 +1886,15 @@ def main():
 
 
 if __name__ == "__main__":
+    import sys
+    if "--add-user" in sys.argv:
+        i = sys.argv.index("--add-user")
+        name = sys.argv[i + 1] if i + 1 < len(sys.argv) else ""
+        pw = sys.argv[sys.argv.index("--password") + 1] if "--password" in sys.argv else ""
+        if not pw:
+            pw = base64.urlsafe_b64encode(os.urandom(12)).decode().rstrip("=")
+            print(f"generated password for {name!r}: {pw}")
+        ok, msg = set_user(name, pw)
+        print(("created/updated user " + name) if ok else ("error: " + msg))
+        sys.exit(0 if ok else 1)
     main()
