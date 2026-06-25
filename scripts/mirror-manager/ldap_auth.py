@@ -139,6 +139,9 @@ def _new_conn(cfg):
         if ca:
             if not os.path.exists(ca):
                 raise ValueError(f"CA bundle not found: {ca}")
+            if not os.access(ca, os.R_OK):
+                raise ValueError(f"CA bundle not readable by the auth service user: {ca} "
+                                 f"(fix: sudo chmod 0644 {ca})")
             conn.set_option(ldap.OPT_X_TLS_CACERTFILE, ca)
         conn.set_option(ldap.OPT_X_TLS_NEWCTX, 0)  # must be last TLS option
     return conn
