@@ -19,7 +19,10 @@
 #   --keep-sources     Do not replace /etc/apt/sources.list (only add .sources; may duplicate if old entries exist)
 #   --no-apt-update    Skip apt-get update at the end
 #   --no-mirror-probe  Do not curl-check InRelease on the mirror (use if you know sync is incomplete)
-#   --use-gpg-not-sqv  Write apt.conf to use /usr/bin/gpg for key ops (workaround: sqv rejects some third-party SHA1 keys on Trixie 2026+)
+#   --use-gpg-not-sqv  Write apt.conf to use /usr/bin/gpg for key ops (workaround: sqv rejects
+#                      some third-party SHA1-bound keys on Trixie 2026+). SECURITY: this re-enables
+#                      acceptance of weak SHA1 key signatures fleet-wide — enable only if a vendor
+#                      repo genuinely requires it, and prefer pressing the vendor for a SHA256 key.
 #   -h, --help         Help
 
 set -eu

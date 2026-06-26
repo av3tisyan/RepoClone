@@ -54,7 +54,15 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+import http.client
+import ssl
+import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+
+def _log(msg):
+    """Server-side log to stderr/journal. Never echo internal detail to clients."""
+    print(f"mirror-manager: {msg}", file=sys.stderr, flush=True)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
@@ -81,6 +89,9 @@ AUTH_DIR = os.environ.get("MM_AUTH_DIR", "/opt/apt/manager")
 USERS_DB = os.environ.get("MM_USERS_DB", os.path.join(AUTH_DIR, "users.db"))
 SECRET_FILE = os.environ.get("MM_SECRET_FILE", os.path.join(AUTH_DIR, "secret"))
 SESSION_TTL = int(os.environ.get("MM_SESSION_TTL", str(12 * 3600)))
+# Issue the session cookie with Secure by default; set MM_COOKIE_SECURE=0 only for
+# plaintext-localhost testing. Do NOT infer this from a client-supplied header.
+COOKIE_SECURE = os.environ.get("MM_COOKIE_SECURE", "1") != "0"
 
 # Marker that "disables" a managed deb/clean line (apt-mirror ignores the comment).
 OFF = "#MMOFF# "
@@ -109,6 +120,12 @@ AUDIT_LOG = os.path.join(VAR_DIR, "mirror-manager-audit.jsonl")
 HTTP_TIMEOUT = 60
 MAX_FETCH_BYTES = 268_435_456      # 256 MiB cap on any single upstream fetch
 MAX_DECOMP_BYTES = 1_073_741_824   # 1 GiB cap on a decompressed index (gzip-bomb guard)
+MAX_BODY_BYTES = 1_048_576         # 1 MiB cap on a JSON request body (DoS guard)
+MAX_LOGIN_BYTES = 8_192            # tiny cap on the login form body
+SAFE_PATH = "/usr/sbin:/usr/bin:/sbin:/bin"   # pinned PATH for all subprocesses
+# Optional host allowlist for outbound fetches (probe/discover/key). Empty = any public host.
+ALLOW_HOSTS = set(filter(None, re.split(r"[,\s]+",
+                  os.environ.get("MM_FETCH_ALLOW", "").strip().lower())))
 
 # Privilege model: run privileged systemctl via sudo when not root, so the daemon can run
 # as a dedicated non-root user (see setup-mirror-manager.sh --user). As root, this is a no-op.
@@ -405,29 +422,54 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _FETCH_OPENER = urllib.request.build_opener(_NoRedirect)
 
 
-def _check_public_host(host, port):
-    """SSRF guard: refuse hosts that resolve to non-public addresses."""
+def _resolve_pinned(host, port):
+    """Resolve once, reject any non-public address, return a single pinned IP.
+    Pinning the connection to this IP closes the DNS-rebinding (TOCTOU) SSRF hole
+    where the name re-resolves to an internal address between check and connect.
+    Error text is deliberately generic (no IP/host echoed back — recon oracle)."""
     try:
         infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
-    except OSError as exc:
-        raise ValueError(f"cannot resolve host: {exc}")
+    except OSError:
+        raise ValueError("cannot resolve host")
     for _f, _t, _p, _c, sa in infos:
-        ip = ipaddress.ip_address(sa[0])
+        ip = ipaddress.ip_address(sa[0].split("%")[0])
         if (ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved
                 or ip.is_multicast or ip.is_unspecified):
-            raise ValueError(f"refusing to fetch a non-public address ({ip})")
+            raise ValueError("refusing to fetch a non-public address")
+    return infos[0][4][0]
 
 
 def http_get(url):
     p = urllib.parse.urlparse(url)
     if p.scheme not in ("http", "https"):
         raise ValueError("only http/https URLs are allowed")
-    if not p.hostname:
+    host = p.hostname
+    if not host:
         raise ValueError("missing host in URL")
-    _check_public_host(p.hostname, p.port or (443 if p.scheme == "https" else 80))
-    req = urllib.request.Request(url, headers={"User-Agent": "mirror-manager"})
-    with _FETCH_OPENER.open(req, timeout=HTTP_TIMEOUT) as resp:
+    if ALLOW_HOSTS and host.lower() not in ALLOW_HOSTS:
+        raise ValueError("host is not in the MM_FETCH_ALLOW allowlist")
+    port = p.port or (443 if p.scheme == "https" else 80)
+    ip = _resolve_pinned(host, port)                       # validated + pinned
+    sock = socket.create_connection((ip, port), timeout=HTTP_TIMEOUT)
+    try:
+        if p.scheme == "https":
+            sock = ssl.create_default_context().wrap_socket(sock, server_hostname=host)
+        conn = (http.client.HTTPSConnection if p.scheme == "https"
+                else http.client.HTTPConnection)(host, port, timeout=HTTP_TIMEOUT)
+        conn.sock = sock                                   # connect to the pinned IP
+        path = p.path or "/"
+        if p.query:
+            path += "?" + p.query
+        conn.putrequest("GET", path, skip_host=True)
+        conn.putheader("Host", host)
+        conn.putheader("User-Agent", "mirror-manager")
+        conn.endheaders()
+        resp = conn.getresponse()
+        if resp.status in (301, 302, 303, 307, 308):       # no redirects (SSRF re-entry)
+            raise ValueError("redirects are not allowed")
         return resp.read(MAX_FETCH_BYTES)
+    finally:
+        sock.close()
 
 
 def _bounded_gunzip(raw, limit):
@@ -1020,7 +1062,8 @@ def probe(base_url, suite):
     try:
         rel = http_get(rel_url).decode("utf-8", "replace")
     except Exception as exc:
-        out["error"] = f"Release not reachable: {exc}"
+        _log(f"probe failed for {rel_url}: {exc}")
+        out["error"] = "Release not reachable"
         return out
     comps, arches = [], []
     for line in rel.splitlines():
@@ -1155,8 +1198,21 @@ def sizes_background_refresh():
     threading.Thread(target=compute_sizes, daemon=True).start()
 
 
+def _clamp_int(val, lo, hi, default):
+    """Parse a client-supplied integer and clamp it to [lo, hi]; fall back to default."""
+    try:
+        return max(lo, min(int(val), hi))
+    except (TypeError, ValueError):
+        return default
+
+
 # ---- sync control via systemd ---- #
 def run(cmd, timeout=30, env=None):
+    # Default to the full environment (gpg/systemctl need HOME etc.); an explicit env
+    # is used verbatim (e.g. the minimal snapshot env). Always pin PATH to a trusted set
+    # so a writable dir earlier on PATH can't hijack du/gpg/systemctl/journalctl.
+    env = dict(os.environ) if env is None else dict(env)
+    env["PATH"] = SAFE_PATH
     try:
         return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
     except Exception as exc:
@@ -1193,8 +1249,8 @@ def _db():
                  "username TEXT PRIMARY KEY, pwhash TEXT NOT NULL, created INTEGER)")
     try:
         os.chmod(USERS_DB, 0o600)
-    except OSError:
-        pass
+    except OSError as exc:
+        _log(f"could not chmod users.db to 0600: {exc}")
     return conn
 
 
@@ -1390,7 +1446,8 @@ def start_sync():
                        "Free space, prune snapshots, or lower the floor.")
     r = run(SUDO + ["systemctl", "start", "--no-block", APT_UNIT])
     if r.returncode != 0:
-        return False, (r.stderr or "failed to start (check sudoers for apt-mirror.service)").strip()
+        _log(f"apt-mirror start failed: {(r.stderr or '').strip()}")
+        return False, "failed to start apt-mirror (check sudoers for apt-mirror.service)"
     return True, "started"
 
 
@@ -1434,7 +1491,9 @@ def snapshot_create_bg(snap_id=""):
 
 
 def _snap_env():
-    return {**os.environ, "MIRROR_PATH": MIRROR_PATH, "SNAP_DIR": SNAP_DIR}
+    # Minimal env for the snapshot shell script — don't hand it the whole environment.
+    return {"PATH": SAFE_PATH, "HOME": os.environ.get("HOME", "/root"),
+            "MIRROR_PATH": MIRROR_PATH, "SNAP_DIR": SNAP_DIR}
 
 
 def snapshot_prune(keep):
@@ -1491,13 +1550,23 @@ class Handler(BaseHTTPRequestHandler):
     def _authed(self):
         if not TOKEN:
             return True
-        q = urllib.parse.urlparse(self.path).query
-        tok = urllib.parse.parse_qs(q).get("token", [""])[0] or self.headers.get("X-MM-Token", "")
-        return tok == TOKEN
+        # Header only — never the query string (it leaks via logs/Referer). Constant-time.
+        return hmac.compare_digest(self.headers.get("X-MM-Token", ""), TOKEN)
 
     def _mutating_ok(self):
         # Custom header can't be set by a cross-site <form>, so this blunts CSRF.
         return self.headers.get("X-MM", "") == "1"
+
+    def _origin_ok(self):
+        # Defence-in-depth CSRF: reject mutating requests whose Origin host doesn't
+        # match the request host. Non-browser clients (no Origin) are allowed through.
+        origin = self.headers.get("Origin", "")
+        if not origin:
+            return True
+        oh = (urllib.parse.urlparse(origin).hostname or "").lower()
+        host = (self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or "")
+        host = host.split(",")[0].split(":")[0].strip().lower()
+        return not (oh and host and oh != host)
 
     def _gate(self, mutating=False):
         """Return True if the request may proceed; otherwise send 403 and return False."""
@@ -1533,8 +1602,11 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def _json_body(self):
-        n = int(self.headers.get("Content-Length", "0") or "0")
-        if not n:
+        try:
+            n = int(self.headers.get("Content-Length", "0") or "0")
+        except ValueError:
+            return {}
+        if n <= 0 or n > MAX_BODY_BYTES:      # reject missing/oversize without reading it
             return {}
         try:
             return json.loads(self.rfile.read(n).decode("utf-8"))
@@ -1587,12 +1659,17 @@ class Handler(BaseHTTPRequestHandler):
             host = host.split(",")[0].split(":")[0].strip().lower()
             if oh and host and oh != host:
                 return self._login_page("Invalid request origin.")
-        n = int(self.headers.get("Content-Length", "0") or "0")
-        raw = self.rfile.read(n).decode("utf-8", "replace") if n else ""
+        try:
+            n = int(self.headers.get("Content-Length", "0") or "0")
+        except ValueError:
+            n = 0
+        if n > MAX_LOGIN_BYTES:
+            return self._login_page("Request too large.")
+        raw = self.rfile.read(n).decode("utf-8", "replace") if n > 0 else ""
         form = urllib.parse.parse_qs(raw)
         user = (form.get("username", [""])[0]).strip()
         pw = form.get("password", [""])[0]
-        sec = "; Secure" if self.headers.get("X-Forwarded-Proto", "") == "https" else ""
+        sec = "; Secure" if COOKIE_SECURE else ""
         if verify_login(user, pw):
             login_ok(ip)
             cookie = (f"mm_session={make_session(user)}; HttpOnly; SameSite=Lax{sec}; "
@@ -1604,7 +1681,7 @@ class Handler(BaseHTTPRequestHandler):
         return self._login_page("Invalid username or password.")
 
     def _logout(self):
-        sec = "; Secure" if self.headers.get("X-Forwarded-Proto", "") == "https" else ""
+        sec = "; Secure" if COOKIE_SECURE else ""
         return self._redirect("/login", f"mm_session=; HttpOnly; SameSite=Lax{sec}; Path=/; Max-Age=0")
 
     # -- routing ------------------------------------------------------------ #
@@ -1639,7 +1716,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, probe(base, suite))
         if path == "/api/log":
             q = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
-            n = q.get("lines", ["200"])[0]
+            n = _clamp_int(q.get("lines", ["200"])[0], 1, 5000, 200)
             log = sync_log(n)
             return self._send(200, {"log": log, "sync": sync_state(),
                                     "progress": sync_progress(log)})
@@ -1665,8 +1742,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/setup":
             return self._send(200, bootstrap_script(), "text/plain; charset=utf-8")
         if path == "/api/audit":
-            n = int(urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("n", ["100"])[0] or 100)
-            return self._send(200, {"entries": read_audit(min(n, 1000))})
+            n = _clamp_int(urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query).get("n", ["100"])[0], 1, 1000, 100)
+            return self._send(200, {"entries": read_audit(n)})
         if path == "/api/snapshots":
             return self._send(200, snapshots_info())
         if path == "/api/estimate-all":
@@ -1716,6 +1793,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(403, {"error": "bad token"})
         if not self._mutating_ok():
             return self._send(403, {"error": "missing X-MM header"})
+        if not self._origin_ok():
+            return self._send(403, {"error": "bad request origin"})
         if not self._need_auth(path):
             return
         if path == "/api/repos":
@@ -1753,7 +1832,7 @@ class Handler(BaseHTTPRequestHandler):
             self._audit("snapshot-create", sid or "auto")
             return self._send(202, {"ok": True, "message": "creating snapshot (background)"})
         if path == "/api/snapshots/prune":
-            keep = int(self._json_body().get("keep", 4))
+            keep = _clamp_int(self._json_body().get("keep", 4), 0, 365, 4)
             r = snapshot_prune(keep)
             self._audit("snapshot-prune", f"keep={keep}")
             return self._send(200, {"ok": r.returncode == 0, "output": (r.stdout or r.stderr).strip()})
@@ -1763,7 +1842,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._audit("publish", "landing + setup.sh")
                 return self._send(200, {"ok": True, **res})
             except Exception as exc:
-                return self._send(500, {"error": f"publish failed: {exc}"})
+                _log(f"landing publish failed: {exc}")
+                return self._send(500, {"error": "publish failed"})
         if path == "/api/auth/users":
             b = self._json_body()
             action = (b.get("action") or "set").strip()
@@ -1787,6 +1867,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(403, {"error": "bad token"})
         if not self._mutating_ok():
             return self._send(403, {"error": "missing X-MM header"})
+        if not self._origin_ok():
+            return self._send(403, {"error": "bad request origin"})
         if not self._need_auth(path):
             return
         if path == "/api/repos":
@@ -1916,7 +1998,8 @@ class Handler(BaseHTTPRequestHandler):
                 fetch_key(key["name"], key["url"])
                 result["key"] = f"fetched {key['name']}"
             except Exception as exc:
-                return self._send(502, {"error": f"key fetch failed: {exc}"})
+                _log(f"key fetch failed: {exc}")
+                return self._send(502, {"error": "key fetch failed"})
         elif key and key.get("kind") == "archive":
             result["key"] = (f"{key['name']} is a distro archive keyring — "
                              "run scripts/populate-mirror-keys.sh")
@@ -1926,7 +2009,8 @@ class Handler(BaseHTTPRequestHandler):
                               disabled=bool(body.get("disabled")))
             result["added"] = added
         except Exception as exc:
-            return self._send(500, {"error": f"writing mirror.list failed: {exc}"})
+            _log(f"writing mirror.list failed: {exc}")
+            return self._send(500, {"error": "writing mirror.list failed"})
         self._audit("add", added + (f" (preset {preset_tag})" if preset_tag else " (custom)"))
 
         if body.get("sync", True):
@@ -1936,12 +2020,31 @@ class Handler(BaseHTTPRequestHandler):
         return self._send(200, {"ok": True, **result})
 
 
+class _BoundedServer(ThreadingHTTPServer):
+    """Cap concurrent handler threads so slow/many requests can't exhaust the host."""
+    daemon_threads = True
+    _sem = threading.BoundedSemaphore(int(os.environ.get("MM_MAX_WORKERS", "48")))
+
+    def process_request(self, request, client_address):
+        if not self._sem.acquire(timeout=10):
+            request.close()          # saturated — drop politely
+            return
+        super().process_request(request, client_address)
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self._sem.release()
+
+
 def main():
     # Warm the size cache on boot if stale (older than 1h) or missing.
     cache = load_sizes_cache()
     if time.time() - cache.get("updated", 0) > 3600:
         sizes_background_refresh()
-    httpd = ThreadingHTTPServer((LISTEN_HOST, LISTEN_PORT), Handler)
+    Handler.timeout = 30                       # per-request socket timeout (slowloris guard)
+    httpd = _BoundedServer((LISTEN_HOST, LISTEN_PORT), Handler)
     allow = ",".join(str(n) for n in ALLOW_NETS) or "(all)"
     print(f"mirror-manager listening on http://{LISTEN_HOST}:{LISTEN_PORT}  "
           f"(mirror.list={MIRROR_LIST}, budget={BUDGET_BYTES}, allow={allow})")

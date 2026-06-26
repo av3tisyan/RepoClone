@@ -17,6 +17,9 @@ HASHICORP_KEY_URL="${HASHICORP_KEY_URL:-https://apt.releases.hashicorp.com/gpg}"
 OPENPROJECT_KEY_URL="${OPENPROJECT_KEY_URL:-https://packages.openproject.com/srv/deb/opf/openproject/gpg-key.asc}"
 POSTGRESQL_KEY_URL="${POSTGRESQL_KEY_URL:-https://www.postgresql.org/media/keys/ACCC4CF8.asc}"
 UBUNTU_POOL="${UBUNTU_POOL:-http://archive.ubuntu.com/ubuntu/pool/main/u/ubuntu-keyring}"
+# Third-party keys must match a pinned fingerprint (EXPECT_<NAME>_FPR). Set ALLOW_UNPINNED=1
+# ONLY to bootstrap on first run, before you have captured + verified the fingerprints.
+ALLOW_UNPINNED="${ALLOW_UNPINNED:-0}"
 
 umask 022
 sudo install -d -m0755 "$KEYS_DIR"
@@ -133,19 +136,33 @@ echo "    SHA256SUMS:"
 sudo cat "$KEYS_DIR/SHA256SUMS" | sed 's/^/    /'
 
 echo
-echo "==> Key fingerprints — verify each against the vendor's PUBLISHED fingerprint."
-echo "    (To enforce, set e.g. EXPECT_POSTGRESQL_FPR=<fpr> before running; mismatch aborts.)"
+echo "==> Key fingerprints — third-party keys MUST match a pinned fingerprint."
+echo "    Pin with EXPECT_<NAME>_FPR=<fpr> (NAME: ZABBIX HASHICORP OPENPROJECT POSTGRESQL)."
+echo "    First run: capture the fingerprints printed below, verify them out-of-band against"
+echo "    each vendor's PUBLISHED fingerprint, then re-run with them pinned. To bootstrap"
+echo "    once without pinning (NOT for production) set ALLOW_UNPINNED=1."
 fp_fail=0
 for kf in debian-archive-keyring ubuntu-archive-keyring zabbix hashicorp openproject postgresql; do
   f="$KEYS_DIR/$kf.gpg"
   [ -f "$f" ] || continue
   fpr="$(gpg --no-default-keyring --keyring "$f" --with-colons --fingerprint 2>/dev/null | awk -F: '/^fpr:/{print $10; exit}')"
   echo "    $kf.gpg: ${fpr:-<unreadable>}"
+  # OS archive keyrings come from the dpkg-verified package — no pin required.
+  case "$kf" in debian-archive-keyring|ubuntu-archive-keyring) continue ;; esac
   var="EXPECT_$(printf '%s' "$kf" | tr 'a-z-' 'A-Z_')_FPR"
   exp="$(eval "printf '%s' \"\${$var:-}\"")"
-  if [ -n "$exp" ] && [ "$exp" != "$fpr" ]; then
+  if [ -z "$exp" ]; then
+    if [ "$ALLOW_UNPINNED" = "1" ]; then
+      echo "    .. WARNING: $kf.gpg not pinned (ALLOW_UNPINNED=1) — trusting on first use." >&2
+    else
+      echo "    !! NO PINNED FINGERPRINT for $kf.gpg — set $var=$fpr (after verifying it) or ALLOW_UNPINNED=1." >&2
+      fp_fail=1
+    fi
+  elif [ "$exp" != "$fpr" ]; then
     echo "    !! MISMATCH: $kf.gpg fingerprint $fpr != expected $exp" >&2
     fp_fail=1
+  else
+    echo "    .. OK: $kf.gpg matches pinned fingerprint."
   fi
 done
 [ "$fp_fail" -eq 0 ] || { echo "ERROR: key fingerprint verification failed — not trusting these keys." >&2; exit 1; }

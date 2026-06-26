@@ -14,6 +14,7 @@ BASE="${1:-https://apt.example.com}"
 BASE="${BASE%/}"
 
 failed=0
+[ -n "${CURL_INSECURE:-}" ] && echo "WARNING: CURL_INSECURE set — TLS verification DISABLED (lab only)." >&2
 echo "==> Base: ${BASE}"
 while IFS= read -r p || [ -n "$p" ]; do
   [ -z "$p" ] && continue

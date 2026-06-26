@@ -12,6 +12,7 @@
 # 'mirror-backup.sh restore <bundle>', then 'apt-mirror' (or restore a snapshot) for the data.
 
 set -eu
+umask 077                       # bundle holds private keyrings + sudoers — keep it tight
 
 ITEMS="/etc/apt/mirror.list /opt/apt/manager/mirror.list /opt/apt/keys \
 /etc/default/apt-mirror /etc/systemd/system/mirror-manager.service.d \
@@ -44,9 +45,14 @@ case "$cmd" in
     [ -f "$f" ] || { echo "no such file: $f" >&2; exit 1; }
     echo "==> Restoring config from $f to / — current files will be overwritten."
     echo "    Contents:"; tar tzf "$f" | sed 's/^/      /'
+    # Refuse a tampered/hostile bundle: no absolute paths and no '..' traversal.
+    if tar tzf "$f" | grep -qE '(^/|(^|/)[.][.](/|$))'; then
+      echo "REFUSING: archive contains absolute or '..' paths — possible path-traversal bundle." >&2
+      exit 1
+    fi
     printf "Proceed? [y/N] "; read -r ans
     case "$ans" in y|Y|yes) ;; *) echo "aborted"; exit 1 ;; esac
-    tar xzf "$f" -C /
+    tar xzf "$f" -C / --no-overwrite-dir
     echo "restored. Run: sudo systemctl daemon-reload && sudo nginx -t && sudo systemctl reload nginx"
     echo "If the manager runs as a non-root user, re-run scripts/setup-mirror-manager.sh to fix ownership."
     ;;

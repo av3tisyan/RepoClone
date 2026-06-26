@@ -112,7 +112,6 @@ if [ -n "$MGR_USER" ] && [ "$MGR_USER" != "root" ]; then
   cat > "$SUDOERS" <<EOF
 # Managed by setup-mirror-manager.sh — lets $MGR_USER drive apt-mirror without full root.
 Cmnd_Alias MM_SYSCTL = /usr/bin/systemctl start --no-block apt-mirror.service, \\
-  /usr/bin/systemctl start apt-mirror.timer, /usr/bin/systemctl stop apt-mirror.timer, \\
   /usr/bin/systemctl enable --now apt-mirror.timer, /usr/bin/systemctl disable --now apt-mirror.timer
 $MGR_USER ALL=(root) NOPASSWD: MM_SYSCTL
 EOF

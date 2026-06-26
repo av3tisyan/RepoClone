@@ -5,7 +5,11 @@ After=network.target
 
 [Service]
 Type=simple
-# Needs root: writes /etc/apt/mirror.list and /opt/apt/keys, starts apt-mirror.service.
+# PRODUCTION: run as a DEDICATED NON-ROOT user — scripts/setup-mirror-manager.sh creates
+# that user plus a narrow sudoers grant and a drop-in that overrides User= below. This base
+# unit runs as root only as a fallback (it writes /etc/apt/mirror.list + /opt/apt/keys and
+# starts apt-mirror.service); a bug in the HTTP handler while root is an RCE-to-root path,
+# so prefer the non-root setup.
 User=root
 WorkingDirectory=/opt/apt/mirror-manager
 ExecStart=/usr/bin/python3 /opt/apt/mirror-manager/mirror_manager.py
@@ -14,15 +18,30 @@ RestartSec=3
 # Bind to localhost only; expose via SSH tunnel or the nginx auth proxy.
 Environment=MM_LISTEN_HOST=127.0.0.1
 Environment=MM_LISTEN_PORT=8080
-# Set a shared secret if you proxy it; clients pass ?token= or X-MM-Token.
+# Set a shared secret if you proxy it; clients pass the X-MM-Token header.
 # Environment=MM_TOKEN=change-me
 # Environment=MM_BUDGET_BYTES=1700000000000
 
-# Light hardening (cannot fully sandbox: it must write /etc/apt and /opt/apt).
+# Sandboxing — confines a bug in the HTTP handler; writes limited to /etc/apt + /opt/apt.
 NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/etc/apt /opt/apt
 ProtectHome=yes
 PrivateTmp=yes
-ReadWritePaths=/etc/apt /opt/apt
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+RestrictNamespaces=yes
+RestrictSUIDSGID=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+LockPersonality=yes
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+# Aggressive extras — enable once validated in your environment:
+# CapabilityBoundingSet=
+# MemoryDenyWriteExecute=yes
 
 [Install]
 WantedBy=multi-user.target

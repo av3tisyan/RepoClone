@@ -57,11 +57,15 @@ Then:
 1. **First sync** — `sudo systemctl start apt-mirror.service` (or the dashboard's *Sync now*); the daily timer is already enabled. Watch it: `journalctl -u apt-mirror.service -f`.
 2. **Re-publish** once the sync finishes — dashboard **Server → Publish** — so `setup.sh` includes the now-synced repos (it skips un-synced ones).
 3. **TLS** — point `ssl_certificate*` in `/etc/nginx/sites-available/apt.example.com.conf` at your cert, and DNS `apt.example.com` at this host.
-4. **Manage repos** in the dashboard (add by URL / catalog / custom), and **set up clients** with one line:
+4. **Manage repos** in the dashboard (add by URL / catalog / custom), and **set up clients**.
+   Recommended — verify the integrity digest (published out-of-band in the dashboard → **Server**)
+   before running it as root:
    ```bash
-   curl -fsSL https://apt.example.com/setup.sh | sudo sh                 # base OS + all synced repos
-   curl -fsSL https://apt.example.com/setup.sh | sudo sh -s -- --list    # choose which to add
+   curl -fsSLO https://apt.example.com/setup.sh
+   echo "<digest-from-dashboard>  setup.sh" | sha256sum -c   # abort if this fails
+   sudo sh setup.sh                 # base OS + all synced repos  (add: -s -- --list to choose)
    ```
+   Quick, unverified form (only over trusted networks): `curl -fsSL https://apt.example.com/setup.sh | sudo sh`
 
 Minimal variant (no dashboard): `sudo ./scripts/setup-apt-mirror-server.sh --role both`.
 Split hosts: **`--role sync`** (connected) and **`--role airgap`** (isolated nginx). See
