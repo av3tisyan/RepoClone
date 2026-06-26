@@ -131,7 +131,8 @@ if [ "$ROLE" = "sync" ] || [ "$ROLE" = "both" ]; then
   echo "==> Installing packages (sync)"
   export DEBIAN_FRONTEND=noninteractive
   apt-get update -qq
-  apt-get install -y apt-mirror debian-archive-keyring dpkg curl ca-certificates sudo
+  # gnupg is needed by populate-mirror-keys.sh to dearmor third-party repo keys for apt Signed-By.
+  apt-get install -y apt-mirror debian-archive-keyring dpkg curl ca-certificates sudo gnupg
 
   echo "==> Installing /etc/apt/mirror.list"
   install -m0644 "$ROOT/config/mirror.list" /etc/apt/mirror.list
